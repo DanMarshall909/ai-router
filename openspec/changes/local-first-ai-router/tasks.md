@@ -1,19 +1,19 @@
 ## 1. Module and package structure
 
 - [x] 1.1 Delete the abandoned .NET tree (`src/`, `tests/`, `LocalFirst.AiRouter.sln`, `Directory.Build.props`, `appsettings.example.json`) — none of it is committed, and it implements groups 1–5 of the superseded .NET plan
-- [x] 1.2 Initialise the Go module with `cmd/airouter` and `internal/{config,routing,local,cloud,shell,httpapi,observability}`, with `internal/routing` importing nothing that performs I/O
-- [x] 1.3 Add `golang.org/x/sync` and `github.com/stretchr/testify` as the only direct dependencies, and record in the README that `testify/mock` is deliberately excluded
+- [ ] 1.2 Initialise the Go module with `cmd/airouter` and `internal/{config,routing,local,cloud,shell,httpapi,observability}`, with `internal/routing` importing nothing that performs I/O
+- [ ] 1.3 Add `golang.org/x/sync` and `github.com/stretchr/testify` as the only direct dependencies, and record in the README that `testify/mock` is deliberately excluded
 - [x] 1.4 Add `.gitignore` covering build output and local configuration files that may carry keys
-- [x] 1.5 Verify `go build ./...` and `go test ./...` succeed on the empty module, and `go vet ./...` is clean
+- [ ] 1.5 Verify `go build ./...` and `go test ./...` succeed on the empty module, and `go vet ./...` is clean
 
 ## 2. Configuration and validation
 
-- [x] 2.1 Add typed config structs for `localModel`, `openRouter`, `routing`, `shellTool`, and `modelRouting.strategies`, each with named exported constants for its key path and defaults
-- [x] 2.2 Load `config.json` via `encoding/json`, apply environment-variable overrides, and validate at startup with errors naming the offending section and setting
+- [ ] 2.1 Add typed config structs for `localModel`, `openRouter`, `routing`, `shellTool`, and `modelRouting.strategies`, each with named exported constants for its key path and defaults
+- [ ] 2.2 Load `config.json` via `encoding/json`, apply environment-variable overrides, and validate at startup with errors naming the offending section and setting
 - [x] 2.3 Write failing tests then implement: invalid configuration fails fast; cloud settings are optional when cloud is disabled; enabled cloud without an API key fails with a message explaining the environment variable
 - [x] 2.4 Write failing test then implement: a strategy with no `modelRouting` mapping fails startup validation naming the strategy
-- [x] 2.5 Write failing test then implement: the unmodified `<configure-me: ...>` placeholder fails startup validation naming the strategy and pointing at the OpenRouter model catalogue
-- [x] 2.6 Add `config.example.json` with all sections documented, an empty API key, and placeholder cloud model identifiers
+- [ ] 2.5 Write failing test then implement: the unmodified `<configure-me: ...>` placeholder fails startup validation naming the strategy and pointing at the OpenRouter model catalogue
+- [ ] 2.6 Add `config.example.json` with all sections documented, an empty API key, and placeholder cloud model identifiers
 
 ## 3. Domain types and provider abstractions
 
@@ -24,18 +24,18 @@
 
 ## 4. Deterministic routing policy
 
-- [x] 4.1 Write failing tests then implement signal extraction: approximate input token count, coding-shaped, reasoning-shaped, tools requested, request length
-- [x] 4.2 Write failing test then implement: `model: auto` on an ordinary request selects `QuickLocal`
-- [x] 4.3 Write failing test then implement: a request over the complexity threshold selects the configured cloud reasoning or cloud coding strategy
-- [x] 4.4 Write failing test then implement: input exceeding `routing.maxLocalInputTokens` never selects a local strategy
-- [x] 4.5 Write failing test then implement: identical request and system state yield an identical `RoutingDecision`
-- [x] 4.6 Write failing tests then implement explicit override: a permitted override is honoured and recorded in the reason; a policy-violating override is rejected with an explanatory response
-- [x] 4.7 Write failing test then implement: cloud prohibition returns a clear service-unavailable response and transmits nothing externally
-- [x] 4.8 Write failing test then implement strategy→provider/model resolution from configuration
+- [ ] 4.1 Write failing tests then implement signal extraction: approximate input token count, coding-shaped, reasoning-shaped, tools requested, request length
+- [ ] 4.2 Write failing test then implement: `model: auto` on an ordinary request selects `QuickLocal`
+- [ ] 4.3 Write failing test then implement: a request over the complexity threshold selects the configured cloud reasoning or cloud coding strategy
+- [ ] 4.4 Write failing test then implement: input exceeding `routing.maxLocalInputTokens` never selects a local strategy
+- [ ] 4.5 Write failing test then implement: identical request and system state yield an identical `RoutingDecision`
+- [ ] 4.6 Write failing tests then implement explicit override: a permitted override is honoured and recorded in the reason; a policy-violating override is rejected with an explanatory response
+- [ ] 4.7 Write failing test then implement: cloud prohibition returns a clear service-unavailable response and transmits nothing externally
+- [ ] 4.8 Write failing test then implement strategy→provider/model resolution from configuration
 
 ## 5. Optional local self-assessment
 
-- [ ] 5.1 Write failing test then implement: self-assessment is disabled by default and issues no classification prompt
+- [x] 5.1 Write failing test then implement: self-assessment is disabled by default and issues no classification prompt
 - [ ] 5.2 Implement the classifier requesting strict JSON naming one of the five strategies
 - [ ] 5.3 Write failing test then implement: a classifier recommendation cannot bypass privacy, cost, or security policy
 - [ ] 5.4 Write failing test then implement: classification requests are structurally ineligible for further classification
@@ -44,24 +44,24 @@
 ## 6. llama.cpp process manager
 
 - [x] 6.1 Add the process abstraction over `os/exec` (start, wait/exit notification, kill, stdout/stderr readers) plus a fake simulating slow start, crash, hang, and unresponsive shutdown
-- [x] 6.2 Write failing test then implement start with arguments as separate `exec.Command` entries, covering paths containing spaces and quotes
-- [x] 6.3 Write failing test then implement readiness by polling the llama.cpp health endpoint against an `httptest` server, bounded by the configured startup timeout
-- [x] 6.4 Write failing test then implement single-flight startup via `singleflight.Group` so five concurrent requests start exactly one process and share the result
+- [ ] 6.2 Write failing test then implement start with arguments as separate `exec.Command` entries, covering paths containing spaces and quotes
+- [ ] 6.3 Write failing test then implement readiness by polling the llama.cpp health endpoint against an `httptest` server, bounded by the configured startup timeout
+- [ ] 6.4 Write failing test then implement single-flight startup via `singleflight.Group` so five concurrent requests start exactly one process and share the result
 - [x] 6.5 Write failing test then implement: a start that fails is retried on the next request rather than cached, because `singleflight` must not behave like `sync.Once`
 - [x] 6.6 Write failing test then implement reuse of an already-ready process
-- [x] 6.7 Write failing test then implement state tracking through `Stopped` → `Starting` → `Ready`, exposing the process ID, holding the mutex only across state reads and writes
+- [ ] 6.7 Write failing test then implement state tracking through `Stopped` → `Starting` → `Ready`, exposing the process ID, holding the mutex only across state reads and writes
 - [x] 6.8 Write failing test then implement `IsBusy` derived from the active-request count, and verify concurrent requests do not change lifecycle state
 - [x] 6.9 Write failing test then implement `Faulted` on launch failure or readiness timeout
-- [x] 6.10 Write failing test then implement graceful stop, and force-kill of the process group/job object after the shutdown timeout
-- [x] 6.11 Write failing test then implement unexpected-exit detection setting `Faulted` and preventing routing to the dead process
-- [x] 6.12 Verify all process resources and goroutines are released on stop and on shutdown, with `go test -race` clean
+- [ ] 6.10 Write failing test then implement graceful stop, and force-kill of the process group/job object after the shutdown timeout
+- [ ] 6.11 Write failing test then implement unexpected-exit detection setting `Faulted` and preventing routing to the dead process
+- [ ] 6.12 Verify all process resources and goroutines are released on stop and on shutdown, with `go test -race` clean
 
 ## 7. Local model client
 
 - [x] 7.1 Implement the OpenAI-compatible `llama-server` client over `http.Client` with configured timeouts and `ctx` cancellation preserved, yielding `iter.Seq2[Chunk, error]`
-- [x] 7.2 Write failing tests then implement distinct outcomes for startup failure, connection failure, timeout, invalid response, and generation failure
+- [ ] 7.2 Write failing tests then implement distinct outcomes for startup failure, connection failure, timeout, invalid response, and generation failure
 - [x] 7.3 Write failing test then implement before-first-chunk versus after-first-chunk failure reporting, so the dispatcher can tell whether fallback remains available
-- [x] 7.4 Write failing test then verify full prompts are not logged by default
+- [ ] 7.4 Write failing test then verify full prompts are not logged by default
 
 ## 8. Idle unload loop
 
@@ -75,20 +75,20 @@
 
 ## 9. OpenRouter client
 
-- [x] 9.1 Implement the client with configurable base URL, model mappings, and timeout, reading the API key from configuration or the environment
-- [x] 9.2 Write failing test then implement optional application title and referer headers driven by configuration
-- [x] 9.3 Write failing test then implement: no outbound call is made when cloud use is disabled
-- [x] 9.4 Write failing test then implement error translation for authentication and rate-limit failures with keys and authorization headers absent from logs
+- [ ] 9.1 Implement the client with configurable base URL, model mappings, and timeout, reading the API key from configuration or the environment
+- [ ] 9.2 Write failing test then implement optional application title and referer headers driven by configuration
+- [ ] 9.3 Write failing test then implement: no outbound call is made when cloud use is disabled
+- [ ] 9.4 Write failing test then implement error translation for authentication and rate-limit failures with keys and authorization headers absent from logs
 
 ## 10. Resilience and fallback
 
-- [x] 10.1 Write failing test then implement the single controlled local→cloud fallback marking `IsFallback` on the recorded decision
-- [x] 10.2 Write failing test then implement: fallback is taken when local fails before the first chunk of a streaming request, and the client sees a complete stream with no partial local content
-- [x] 10.3 Write failing test then implement: a local failure after the first chunk has been flushed terminates the stream and is not re-dispatched
-- [x] 10.4 Write failing test then implement: a non-streaming request retains the full fallback window at every point before the aggregated body is written
-- [x] 10.5 Write failing test then implement: a failing fallback does not cascade into further retries
-- [x] 10.6 Write failing test then implement: requests including a non-idempotent tool action are not automatically retried
-- [x] 10.7 Write failing tests then verify `ctx` cancellation propagates through local startup, local inference, and cloud inference
+- [ ] 10.1 Write failing test then implement the single controlled local→cloud fallback marking `IsFallback` on the recorded decision
+- [ ] 10.2 Write failing test then implement: fallback is taken when local fails before the first chunk of a streaming request, and the client sees a complete stream with no partial local content
+- [ ] 10.3 Write failing test then implement: a local failure after the first chunk has been flushed terminates the stream and is not re-dispatched
+- [ ] 10.4 Write failing test then implement: a non-streaming request retains the full fallback window at every point before the aggregated body is written
+- [ ] 10.5 Write failing test then implement: a failing fallback does not cascade into further retries
+- [ ] 10.6 Write failing test then implement: requests including a non-idempotent tool action are not automatically retried
+- [ ] 10.7 Write failing tests then verify `ctx` cancellation propagates through local startup, local inference, and cloud inference
 
 ## 11. Self-healing
 
@@ -109,11 +109,11 @@
 
 ## 12. API endpoints
 
-- [x] 12.1 Implement `POST /v1/chat/completions` returning an OpenAI-shaped response for a non-streaming `auto` request, aggregating the provider iterator
-- [x] 12.2 Write failing test then implement SSE streaming for `stream: true`: incremental `choices[0].delta.content` chunks, `data: [DONE]`, and `http.Flusher.Flush` per chunk rather than buffering
-- [x] 12.3 Write failing test then verify the provider choice is invisible to a streaming client, and that the aggregated non-streaming body equals the concatenated chunks
-- [x] 12.4 Write failing test then implement: client disconnect cancels upstream work via request `ctx`
-- [x] 12.5 Write failing tests then implement request validation rejecting empty `messages` and unknown roles without starting the model or contacting a provider
+- [ ] 12.1 Implement `POST /v1/chat/completions` returning an OpenAI-shaped response for a non-streaming `auto` request, aggregating the provider iterator
+- [ ] 12.2 Write failing test then implement SSE streaming for `stream: true`: incremental `choices[0].delta.content` chunks, `data: [DONE]`, and `http.Flusher.Flush` per chunk rather than buffering
+- [ ] 12.3 Write failing test then verify the provider choice is invisible to a streaming client, and that the aggregated non-streaming body equals the concatenated chunks
+- [ ] 12.4 Write failing test then implement: client disconnect cancels upstream work via request `ctx`
+- [ ] 12.5 Write failing tests then implement request validation rejecting empty `messages` and unknown roles without starting the model or contacting a provider
 - [ ] 12.6 Implement `GET /health`, `/health/live`, `/health/ready`, with liveness independent of local model state and readiness unhealthy when no provider is usable
 - [ ] 12.7 Implement `POST /api/router/local-model/start` and `/stop` under the administrative authorization policy
 - [ ] 12.8 Write failing test then verify a chat-only caller cannot reach administrative endpoints
@@ -182,3 +182,21 @@
 - [ ] 18.3 Run `go test -race ./...` and correct all failures
 - [ ] 18.4 Confirm no placeholder functions, pseudocode, or `TODO: implement` comments remain
 - [ ] 18.5 Report the resulting repository tree and summarise design decisions and remaining limitations
+
+## Audit Reconciliation (2026-07-17)
+
+Checked tasks are reserved for work whose stated behavior is implemented and supported by an appropriate focused test, or for completed repository-structure work that can be directly inspected. Reopened tasks fall into one or more of these categories:
+
+- **Partial**: some code exists, but the required behavior is incomplete.
+- **Divergent**: current behavior differs from the task or requirement.
+- **Unproven**: code exists, but the required focused test or verification has not been run.
+
+The following groups require reconciliation before they can be marked complete again:
+
+- **1–2**: required package/dependency/config-example details and full environment override coverage.
+- **4**: deterministic signal extraction and policy are absent; current `auto` routing is handler-default/self-assessment driven.
+- **6–7**: several lifecycle guarantees lack focused tests; process-group termination, faulted routing protection, resource cleanup, and prompt-redaction proof remain incomplete.
+- **8**: idle-loop behavior exists but does not meet the injected-clock, streaming activity, and test requirements.
+- **9–10**: cloud configuration, header independence, disablement, redaction, and fallback behavior need the specified tests and guards.
+- **12**: core endpoint behavior exists, but required OpenAI response fields, streaming verification, provider invisibility, disconnect handling, and no-side-effect validation tests remain incomplete.
+- **11 and 13–18**: remain largely or wholly unimplemented as already unchecked.
