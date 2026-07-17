@@ -28,11 +28,13 @@ type fakeProvider struct {
 	err    error
 	mu     sync.Mutex
 	calls  int
+	req    routing.ChatRequest
 }
 
 func (f *fakeProvider) Stream(ctx context.Context, req routing.ChatRequest) (iter.Seq2[routing.Chunk, error], error) {
 	f.mu.Lock()
 	f.calls++
+	f.req = req
 	f.mu.Unlock()
 	if f.err != nil {
 		return nil, f.err
@@ -46,6 +48,12 @@ func (f *fakeProvider) Stream(ctx context.Context, req routing.ChatRequest) (ite
 	}, nil
 }
 
+func (f *fakeProvider) Request() routing.ChatRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.req
+}
+
 func (f *fakeProvider) CallCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -55,7 +63,7 @@ func (f *fakeProvider) CallCount() int {
 func setupHandler(t *testing.T, localProvider, cloudProvider routing.ChatProvider) *httptest.Server {
 	t.Helper()
 	d := httpapi.NewDispatcher(localProvider, cloudProvider, nil)
-	h := httpapi.NewHandler(d, nil, config.DefaultRoutingEnableLocalSelfAssessment, nil)
+	h := httpapi.NewHandler(d, nil, config.DefaultRoutingEnableLocalSelfAssessment, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	return httptest.NewServer(mux)
@@ -86,6 +94,20 @@ func TestChatCompletionsNonStreaming(t *testing.T) {
 	require.Equal(t, "assistant", msg["role"])
 }
 
+func TestDisabledLocalSelfAssessmentDoesNotIssueClassificationPrompt(t *testing.T) {
+	local := &fakeProvider{chunks: []routing.Chunk{{Content: "local response"}}}
+	srv := setupHandler(t, local, nil)
+	defer srv.Close()
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"hello"}]}`
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	require.NoError(t, err, "because the default handler must serve an automatic request")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, "because the local provider is available")
+	require.Equal(t, 1, local.CallCount(), "because disabled self-assessment must not issue a classification request")
+}
+
 func TestChatCompletionsStreaming(t *testing.T) {
 	local := &fakeProvider{chunks: []routing.Chunk{
 		{Content: "Hi"}, {Content: " there"},
@@ -105,6 +127,7 @@ func TestChatCompletionsStreaming(t *testing.T) {
 	lines := strings.Split(string(data), "\n")
 
 	var content strings.Builder
+	finished := false
 	for _, line := range lines {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -116,13 +139,20 @@ func TestChatCompletionsStreaming(t *testing.T) {
 		var chunk map[string]any
 		require.NoError(t, json.Unmarshal([]byte(payload), &chunk))
 		choices := chunk["choices"].([]any)
-		delta := choices[0].(map[string]any)["delta"].(map[string]any)
+		choice := choices[0].(map[string]any)
+		require.Equal(t, float64(0), choice["index"], "because streamed choices must have an OpenAI-compatible index")
+		if choice["finish_reason"] == "stop" {
+			finished = true
+			continue
+		}
+		delta := choice["delta"].(map[string]any)
 		if c, ok := delta["content"].(string); ok {
 			content.WriteString(c)
 		}
 	}
 
 	require.Equal(t, "Hi there", content.String())
+	require.True(t, finished, "because an OpenAI-compatible stream must end with a choice carrying the stop reason")
 }
 
 func TestChatCompletionsRejectsEmptyMessages(t *testing.T) {
@@ -141,12 +171,104 @@ func TestChatCompletionsRejectsUnknownRole(t *testing.T) {
 	srv := setupHandler(t, &fakeProvider{}, nil)
 	defer srv.Close()
 
-	body := `{"model":"auto","messages":[{"role":"tool","content":"hi"}]}`
+	body := `{"model":"auto","messages":[{"role":"function","content":"hi"}]}`
 	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestChatCompletionsAcceptsToolRole(t *testing.T) {
+	local := &fakeProvider{chunks: []routing.Chunk{{Content: "tool response"}}}
+	srv := setupHandler(t, local, nil)
+	defer srv.Close()
+
+	body := `{"model":"auto","messages":[{"role":"tool","content":"hi"}]}`
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	require.NoError(t, err, "because tool messages are supported by the local model")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, "because the handler must forward a supported tool message")
+	require.Equal(t, 1, local.CallCount(), "because the tool message must reach the selected provider")
+}
+
+func TestChatCompletionsForwardsToolDefinitionsAndResults(t *testing.T) {
+	local := &fakeProvider{chunks: []routing.Chunk{{Content: "tool response"}}}
+	srv := setupHandler(t, local, nil)
+	defer srv.Close()
+
+	body := `{"model":"auto","tools":[{"type":"function","function":{"name":"list_files","parameters":{"type":"object"}}}],"tool_choice":"auto","parallel_tool_calls":true,"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"list_files","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_1","content":"README.md"}]}`
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	require.NoError(t, err, "because a tool-calling request is valid")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode, "because tool metadata is forwarded to the provider")
+
+	req := local.Request()
+	require.JSONEq(t, `[{
+        "type":"function",
+        "function":{"name":"list_files","parameters":{"type":"object"}}
+    }]`, string(req.Tools), "because tool definitions must be preserved")
+	require.JSONEq(t, `"auto"`, string(req.ToolChoice), "because tool choice must be preserved")
+	require.NotNil(t, req.ParallelToolCalls, "because the parallel-tool-calls option must be preserved")
+	require.True(t, *req.ParallelToolCalls, "because the requested parallel-tool-calls value must be preserved")
+	require.Equal(t, "call_1", req.Messages[1].ToolCallID, "because tool results must retain their call identifier")
+	require.JSONEq(t, `[{"id":"call_1","type":"function","function":{"name":"list_files","arguments":"{}"}}]`, string(req.Messages[0].ToolCalls), "because assistant tool calls must be preserved")
+}
+
+func TestChatCompletionsReturnsToolCalls(t *testing.T) {
+	local := &fakeProvider{chunks: []routing.Chunk{{
+		ToolCalls:    json.RawMessage(`[{"index":0,"id":"call_1","type":"function","function":{"name":"list_files","arguments":"{}"}}]`),
+		FinishReason: "tool_calls",
+	}}}
+	srv := setupHandler(t, local, nil)
+	defer srv.Close()
+
+	body := `{"model":"auto","messages":[{"role":"user","content":"list files"}]}`
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	require.NoError(t, err, "because the provider can return a tool call")
+	defer resp.Body.Close()
+
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result), "because the response must be JSON")
+	choice := result["choices"].([]any)[0].(map[string]any)
+	message := choice["message"].(map[string]any)
+	toolCalls := message["tool_calls"].([]any)
+	require.Equal(t, "call_1", toolCalls[0].(map[string]any)["id"], "because the provider tool-call ID must reach the client")
+	require.Equal(t, "tool_calls", choice["finish_reason"], "because tool calls must be distinguished from normal completion")
+}
+
+func TestChatCompletionsStreamsToolCalls(t *testing.T) {
+	local := &fakeProvider{chunks: []routing.Chunk{{
+		ToolCalls: json.RawMessage(`[{"index":0,"id":"call_1","type":"function","function":{"name":"list_files","arguments":"{}"}}]`),
+	}}}
+	srv := setupHandler(t, local, nil)
+	defer srv.Close()
+
+	body := `{"model":"auto","stream":true,"messages":[{"role":"user","content":"list files"}]}`
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	require.NoError(t, err, "because a streaming tool-call request is valid")
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "because the streamed response must be readable")
+	require.Contains(t, string(data), `"tool_calls":[{"index":0,"id":"call_1"`, "because the tool-call delta must reach the client")
+}
+
+func TestChatCompletionsHighComplexityHintRoutesToCloud(t *testing.T) {
+	local := &fakeProvider{chunks: []routing.Chunk{{Content: "local response"}}}
+	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
+	srv := setupHandler(t, local, cloud)
+	defer srv.Close()
+
+	body := `{"model":"auto","complexity":0.9,"messages":[{"role":"user","content":"Compare these designs."}]}`
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	require.NoError(t, err, "because a complexity hint is a valid request field")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, "because cloud reasoning is available")
+	require.Equal(t, 0, local.CallCount(), "because a high complexity hint must bypass local routing")
+	require.Equal(t, 1, cloud.CallCount(), "because the high complexity request must reach cloud reasoning")
 }
 
 func TestChatCompletionsRejectsInvalidJSON(t *testing.T) {
@@ -214,7 +336,7 @@ func TestColdStartRoutesToCloud(t *testing.T) {
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
 
 	d := httpapi.NewDispatcher(local, cloud, mgr)
-	h := httpapi.NewHandler(d, mgr, config.DefaultRoutingEnableLocalSelfAssessment, nil)
+	h := httpapi.NewHandler(d, mgr, config.DefaultRoutingEnableLocalSelfAssessment, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	srv := httptest.NewServer(mux)
@@ -245,7 +367,7 @@ func TestSubsequentRequestUsesLocalAfterReady(t *testing.T) {
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
 
 	d := httpapi.NewDispatcher(local, cloud, mgr)
-	h := httpapi.NewHandler(d, mgr, config.DefaultRoutingEnableLocalSelfAssessment, nil)
+	h := httpapi.NewHandler(d, mgr, config.DefaultRoutingEnableLocalSelfAssessment, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	srv := httptest.NewServer(mux)
@@ -398,7 +520,7 @@ func TestEmptyAssessmentRoutesOriginalRequestToCloud(t *testing.T) {
 	local := &fakeProvider{}
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
 	d := httpapi.NewDispatcher(local, cloud, mgr)
-	h := httpapi.NewHandler(d, mgr, true, nil)
+	h := httpapi.NewHandler(d, mgr, true, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	srv := httptest.NewServer(mux)

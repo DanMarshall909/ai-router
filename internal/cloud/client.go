@@ -119,8 +119,10 @@ func (c *OpenRouterClient) Stream(ctx context.Context, req routing.ChatRequest) 
 
 func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model string) (io.Reader, error) {
 	type message struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
+		Role       string          `json:"role"`
+		Content    string          `json:"content"`
+		ToolCallID string          `json:"tool_call_id,omitempty"`
+		ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
 	}
 	type plugin struct {
 		ID                  string   `json:"id"`
@@ -128,24 +130,30 @@ func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model strin
 		CostQualityTradeoff *int     `json:"cost_quality_tradeoff,omitempty"`
 	}
 	type request struct {
-		Model     string    `json:"model"`
-		Messages  []message `json:"messages"`
-		Stream    bool      `json:"stream"`
-		SessionID string    `json:"session_id,omitempty"`
-		Fallbacks []string  `json:"models,omitempty"`
-		Plugins   []plugin  `json:"plugins,omitempty"`
+		Model             string          `json:"model"`
+		Messages          []message       `json:"messages"`
+		Tools             json.RawMessage `json:"tools,omitempty"`
+		ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
+		ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
+		Stream            bool            `json:"stream"`
+		SessionID         string          `json:"session_id,omitempty"`
+		Fallbacks         []string        `json:"models,omitempty"`
+		Plugins           []plugin        `json:"plugins,omitempty"`
 	}
 
 	msgs := make([]message, len(req.Messages))
 	for i, m := range req.Messages {
-		msgs[i] = message{Role: m.Role, Content: m.Content}
+		msgs[i] = message{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID, ToolCalls: m.ToolCalls}
 	}
 
 	r := request{
-		Model:     model,
-		Messages:  msgs,
-		Stream:    true,
-		SessionID: req.SessionID,
+		Model:             model,
+		Messages:          msgs,
+		Tools:             req.Tools,
+		ToolChoice:        req.ToolChoice,
+		ParallelToolCalls: req.ParallelToolCalls,
+		Stream:            true,
+		SessionID:         req.SessionID,
 	}
 
 	// Use request-level fallbacks, then client defaults
@@ -204,8 +212,10 @@ func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response, 
 				Model   string `json:"model"`
 				Choices []struct {
 					Delta struct {
-						Content string `json:"content"`
+						Content   string          `json:"content"`
+						ToolCalls json.RawMessage `json:"tool_calls"`
 					} `json:"delta"`
+					FinishReason string `json:"finish_reason"`
 				} `json:"choices"`
 			}
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
@@ -217,8 +227,9 @@ func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response, 
 				continue
 			}
 
-			content := chunk.Choices[0].Delta.Content
-			if content == "" {
+			choice := chunk.Choices[0]
+			content := choice.Delta.Content
+			if content == "" && len(choice.Delta.ToolCalls) == 0 && choice.FinishReason == "" {
 				continue
 			}
 			resolvedModel := model
@@ -231,7 +242,7 @@ func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response, 
 				loggedStart = true
 			}
 
-			if !yield(routing.Chunk{Content: content, Provider: "cloud", Model: resolvedModel}, nil) {
+			if !yield(routing.Chunk{Content: content, ToolCalls: choice.Delta.ToolCalls, FinishReason: choice.FinishReason, Provider: "cloud", Model: resolvedModel}, nil) {
 				return
 			}
 		}

@@ -60,6 +60,38 @@ func TestOpenRouterClientSuccessfulStream(t *testing.T) {
 	require.Equal(t, "Hello from cloud", strings.Join(collected, ""))
 }
 
+func TestOpenRouterClientForwardsAndReturnsToolCalls(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body), "because the cloud request must be valid JSON")
+		require.JSONEq(t, `[{"type":"function","function":{"name":"list_files"}}]`, string(body["tools"]), "because tool definitions must be forwarded")
+		require.JSONEq(t, `"required"`, string(body["tool_choice"]), "because tool choice must be forwarded")
+		require.JSONEq(t, `true`, string(body["parallel_tool_calls"]), "because parallel-tool-calls must be forwarded")
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"list_files\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	parallelToolCalls := true
+	client := cloud.NewOpenRouterClient(srv.URL, "test-key", nil, 5*time.Second, "", "")
+	stream, err := client.Stream(context.Background(), routing.ChatRequest{
+		Model:             "test-model",
+		Messages:          []routing.Message{{Role: "tool", Content: "README.md", ToolCallID: "call_1"}},
+		Tools:             json.RawMessage(`[{"type":"function","function":{"name":"list_files"}}]`),
+		ToolChoice:        json.RawMessage(`"required"`),
+		ParallelToolCalls: &parallelToolCalls,
+	})
+	require.NoError(t, err, "because tool-calling requests must be accepted")
+
+	for chunk, err := range stream {
+		require.NoError(t, err, "because the tool-call stream must be valid")
+		require.JSONEq(t, `[{"index":0,"id":"call_1","type":"function","function":{"name":"list_files","arguments":"{}"}}]`, string(chunk.ToolCalls), "because tool-call deltas must be preserved")
+		require.Equal(t, "tool_calls", chunk.FinishReason, "because the tool-call finish reason must be preserved")
+	}
+}
+
 func TestOpenRouterClientNoOutboundCallWhenDisabled(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

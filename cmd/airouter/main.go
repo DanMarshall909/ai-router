@@ -83,7 +83,7 @@ func main() {
 
 	// Wire dispatcher and handler
 	d := httpapi.NewDispatcher(localClient, cloudClient, mgr)
-	h := httpapi.NewHandler(d, mgr, cfg.Routing.EnableLocalSelfAssessment, httpapi.NewTraceLogger(defaultDebugLogDirectory(), *debugLog))
+	h := httpapi.NewHandler(d, mgr, cfg.Routing.EnableLocalSelfAssessment, cfg.Routing.ComplexityThreshold, httpapi.NewTraceLogger(defaultDebugLogDirectory(), *debugLog))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

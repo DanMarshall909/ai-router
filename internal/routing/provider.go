@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"encoding/json"
 	"iter"
 )
 
@@ -15,22 +16,29 @@ type ChatProvider interface {
 
 // ChatRequest is an OpenAI-compatible chat completion request.
 type ChatRequest struct {
-	Model      string
-	Messages   []Message
-	Stream     bool
-	SessionID  string
-	Fallbacks  []string
+	Model             string
+	Messages          []Message
+	Tools             json.RawMessage
+	ToolChoice        json.RawMessage
+	ParallelToolCalls *bool
+	Stream            bool
+	SessionID         string
+	Fallbacks         []string
 }
 
 // Message represents a single chat message.
 type Message struct {
-	Role    string
-	Content string
+	Role       string
+	Content    string
+	ToolCallID string
+	ToolCalls  json.RawMessage
 }
 
 // Chunk is a single streaming response chunk.
 type Chunk struct {
-	Content string
-	Provider string
-	Model    string
+	Content      string
+	ToolCalls    json.RawMessage
+	FinishReason string
+	Provider     string
+	Model        string
 }

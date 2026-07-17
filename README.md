@@ -66,6 +66,14 @@ curl http://localhost:18081/v1/chat/completions \
 curl http://localhost:18081/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"auto","messages":[{"role":"user","content":"hello"}],"stream":true}'
+
+Set optional `complexity` from `0` (simple) to `1` (complex). A value at or above
+`routing.complexityThreshold` routes an automatic request to cloud reasoning:
+
+```bash
+curl http://localhost:18081/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto","complexity":0.9,"messages":[{"role":"user","content":"Compare these designs."}]}'
 ```
 
 ## Routing

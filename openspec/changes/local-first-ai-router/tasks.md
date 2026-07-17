@@ -46,7 +46,7 @@
 - [x] 6.1 Add the process abstraction over `os/exec` (start, wait/exit notification, kill, stdout/stderr readers) plus a fake simulating slow start, crash, hang, and unresponsive shutdown
 - [ ] 6.2 Write failing test then implement start with arguments as separate `exec.Command` entries, covering paths containing spaces and quotes
 - [ ] 6.3 Write failing test then implement readiness by polling the llama.cpp health endpoint against an `httptest` server, bounded by the configured startup timeout
-- [ ] 6.4 Write failing test then implement single-flight startup via `singleflight.Group` so five concurrent requests start exactly one process and share the result
+- [x] 6.4 Write failing test then implement single-flight startup via `singleflight.Group` so five concurrent requests start exactly one process and share the result
 - [x] 6.5 Write failing test then implement: a start that fails is retried on the next request rather than cached, because `singleflight` must not behave like `sync.Once`
 - [x] 6.6 Write failing test then implement reuse of an already-ready process
 - [ ] 6.7 Write failing test then implement state tracking through `Stopped` → `Starting` → `Ready`, exposing the process ID, holding the mutex only across state reads and writes
@@ -109,7 +109,7 @@
 
 ## 12. API endpoints
 
-- [ ] 12.1 Implement `POST /v1/chat/completions` returning an OpenAI-shaped response for a non-streaming `auto` request, aggregating the provider iterator
+- [x] 12.1 Implement `POST /v1/chat/completions` returning an OpenAI-shaped response for a non-streaming `auto` request, aggregating the provider iterator
 - [ ] 12.2 Write failing test then implement SSE streaming for `stream: true`: incremental `choices[0].delta.content` chunks, `data: [DONE]`, and `http.Flusher.Flush` per chunk rather than buffering
 - [ ] 12.3 Write failing test then verify the provider choice is invisible to a streaming client, and that the aggregated non-streaming body equals the concatenated chunks
 - [ ] 12.4 Write failing test then implement: client disconnect cancels upstream work via request `ctx`
@@ -117,6 +117,7 @@
 - [ ] 12.6 Implement `GET /health`, `/health/live`, `/health/ready`, with liveness independent of local model state and readiness unhealthy when no provider is usable
 - [ ] 12.7 Implement `POST /api/router/local-model/start` and `/stop` under the administrative authorization policy
 - [ ] 12.8 Write failing test then verify a chat-only caller cannot reach administrative endpoints
+- [x] 12.9 Write failing tests then implement OpenAI-compatible tool-calling passthrough for tool definitions, tool-call deltas, and tool-result messages; the router must not execute client tools
 
 ## 13. Security
 

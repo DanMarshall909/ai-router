@@ -48,6 +48,21 @@ The router SHALL validate incoming chat requests and reject malformed ones with 
 - **WHEN** a message carries a role outside the supported set
 - **THEN** the router returns `400 Bad Request` naming the invalid role
 
+### Requirement: Tool-calling passthrough
+The router SHALL forward OpenAI-compatible `tools`, `tool_choice`, and `parallel_tool_calls` request fields to the selected provider. It SHALL preserve assistant `tool_calls` and tool-result message metadata when forwarding subsequent requests, and return provider tool calls in both streaming and non-streaming OpenAI-compatible responses. The router SHALL NOT execute client-supplied tools itself.
+
+#### Scenario: Tool definitions reach the selected provider
+- **WHEN** a client posts a chat completion request containing a `tools` array and `tool_choice`
+- **THEN** the selected provider receives the same tool definitions and tool-choice instruction
+
+#### Scenario: Streaming tool calls reach the client
+- **WHEN** a provider emits a streaming delta containing `tool_calls`
+- **THEN** the router emits that delta to the client without replacing it with text content
+
+#### Scenario: Tool result is forwarded
+- **WHEN** a client sends a `tool` role message with its `tool_call_id`
+- **THEN** the selected provider receives the tool result and its matching call identifier
+
 ### Requirement: Health endpoints
 The router SHALL expose `GET /health`, `GET /health/live`, and `GET /health/ready`. Liveness SHALL reflect only that the process is running. Readiness SHALL reflect that configuration validated and at least one provider path is usable.
 

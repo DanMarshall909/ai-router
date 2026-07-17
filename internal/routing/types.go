@@ -1,5 +1,22 @@
 package routing
 
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleTool      = "tool"
+)
+
+// IsValidMessageRole reports whether role is supported by the chat API.
+func IsValidMessageRole(role string) bool {
+	switch role {
+	case RoleSystem, RoleUser, RoleAssistant, RoleTool:
+		return true
+	default:
+		return false
+	}
+}
+
 // InferenceStrategy identifies a routing target.
 type InferenceStrategy string
 
