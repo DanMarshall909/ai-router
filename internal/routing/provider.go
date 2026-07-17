@@ -31,4 +31,6 @@ type Message struct {
 // Chunk is a single streaming response chunk.
 type Chunk struct {
 	Content string
+	Provider string
+	Model    string
 }

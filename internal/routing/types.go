@@ -4,11 +4,16 @@ package routing
 type InferenceStrategy string
 
 const (
-	QuickLocal    InferenceStrategy = "QuickLocal"
-	DeepLocal     InferenceStrategy = "DeepLocal"
-	CloudGeneral  InferenceStrategy = "CloudGeneral"
+	ProviderLocal = "local"
+	ProviderCloud = "cloud"
+)
+
+const (
+	QuickLocal     InferenceStrategy = "QuickLocal"
+	DeepLocal      InferenceStrategy = "DeepLocal"
+	CloudGeneral   InferenceStrategy = "CloudGeneral"
 	CloudReasoning InferenceStrategy = "CloudReasoning"
-	CloudCoding   InferenceStrategy = "CloudCoding"
+	CloudCoding    InferenceStrategy = "CloudCoding"
 )
 
 // AllStrategies returns every valid InferenceStrategy.
@@ -35,12 +40,13 @@ const (
 
 // RoutingDecision records the outcome of routing a single request.
 type RoutingDecision struct {
-	Strategy   InferenceStrategy
-	Provider   string
-	Model      string
-	Reason     string
-	Confidence float64
-	IsFallback bool
+	Strategy       InferenceStrategy
+	Provider       string
+	ActualProvider string
+	Model          string
+	Reason         string
+	Confidence     float64
+	IsFallback     bool
 }
 
 // RequestContext carries per-request metadata for routing.

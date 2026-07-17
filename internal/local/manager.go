@@ -33,6 +33,9 @@ type Manager struct {
 
 	// exitCh receives the single exit notification from the watcher.
 	exitCh chan ExitStatus
+
+	// idleStopCh signals the idle watcher to stop.
+	idleStopCh chan struct{}
 }
 
 // NewManager creates a process manager from the given config and factory.
@@ -44,6 +47,7 @@ func NewManager(cfg config.LocalModelConfig, fac ProcessFactory) *Manager {
 		healthURL:  fmt.Sprintf("http://%s:%d/health", cfg.Host, cfg.Port),
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 		exitCh:     make(chan ExitStatus, 1),
+		idleStopCh: make(chan struct{}),
 	}
 }
 
@@ -114,6 +118,21 @@ func (m *Manager) Start(ctx context.Context) error {
 		return m.doStart(ctx)
 	})
 	return err
+}
+
+// StartInBackground starts the local model without blocking the caller.
+// If the model is already started or starting, it returns immediately.
+func (m *Manager) StartInBackground(ctx context.Context) {
+	m.mu.Lock()
+	state := m.state
+	m.mu.Unlock()
+
+	if state == routing.StateReady || state == routing.StateStarting || state == routing.StateStopping {
+		return
+	}
+
+	// Use background context so startup isn't cancelled when the request ends
+	go m.Start(context.Background())
 }
 
 func (m *Manager) doStart(ctx context.Context) (any, error) {
@@ -232,6 +251,7 @@ func (m *Manager) Stop(ctx context.Context) error {
 
 	if proc == nil {
 		m.setState(routing.StateStopped)
+		slog.Info("local model stopped", "pid", 0, "mode", "noop")
 		return nil
 	}
 
@@ -242,6 +262,7 @@ func (m *Manager) Stop(ctx context.Context) error {
 	select {
 	case <-m.exitCh:
 		m.setState(routing.StateStopped)
+		slog.Info("local model stopped", "pid", proc.Pid(), "mode", "graceful")
 		return nil
 	case <-time.After(m.cfg.ShutdownTimeout):
 		// Process did not exit gracefully — force-kill.
@@ -249,10 +270,12 @@ func (m *Manager) Stop(ctx context.Context) error {
 		// close the channel directly if needed.
 		m.forceKill(proc)
 		m.setState(routing.StateStopped)
+		slog.Info("local model stopped", "pid", proc.Pid(), "mode", "forced")
 		return nil
 	case <-ctx.Done():
 		m.forceKill(proc)
 		m.setState(routing.StateStopped)
+		slog.Info("local model stopped", "pid", proc.Pid(), "mode", "context-cancelled")
 		return ctx.Err()
 	}
 }
@@ -274,5 +297,64 @@ func (m *Manager) setState(state routing.LocalModelState) {
 	if state == routing.StateStopped || state == routing.StateFaulted {
 		m.pid = 0
 		m.proc = nil
+	}
+}
+
+// StartIdleWatcher begins a background goroutine that stops the model
+// after the configured idle timeout with no activity.
+func (m *Manager) StartIdleWatcher() {
+	go m.idleLoop()
+}
+
+// StopIdleWatcher stops the idle watcher goroutine.
+func (m *Manager) StopIdleWatcher() {
+	select {
+	case m.idleStopCh <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) idleLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.idleStopCh:
+			return
+		case <-ticker.C:
+			m.checkIdle()
+		}
+	}
+}
+
+func (m *Manager) checkIdle() {
+	// Idle timeout of 0 means disabled
+	if m.cfg.IdleTimeout <= 0 {
+		return
+	}
+
+	state := m.State()
+	if state != routing.StateReady {
+		return
+	}
+	if m.IsBusy() {
+		return
+	}
+
+	last := m.LastActivity()
+	if last.IsZero() {
+		return
+	}
+
+	elapsed := time.Since(last)
+	if elapsed >= m.cfg.IdleTimeout {
+		slog.Info("model idle, stopping",
+			"idle_duration", elapsed.String(),
+			"timeout", m.cfg.IdleTimeout.String(),
+		)
+		if err := m.Stop(context.Background()); err != nil {
+			slog.Error("failed to stop idle model", "err", err)
+		}
 	}
 }

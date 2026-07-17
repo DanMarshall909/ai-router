@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -26,8 +27,8 @@ const (
 
 // FailureOutcome describes a local inference failure.
 type FailureOutcome struct {
-	Kind    FailureKind
-	Err     error
+	Kind FailureKind
+	Err  error
 }
 
 func (f FailureOutcome) Error() string {
@@ -68,6 +69,9 @@ func (c *LocalClient) Stream(ctx context.Context, req routing.ChatRequest) (iter
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
+	started := time.Now()
+	inputCharacters := requestCharacters(req.Messages)
+	slog.Debug("sending request to local model", "input_characters", inputCharacters)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, FailureOutcome{Kind: FailureBeforeFirstChunk, Err: fmt.Errorf("connection failure: %w", err)}
@@ -78,7 +82,15 @@ func (c *LocalClient) Stream(ctx context.Context, req routing.ChatRequest) (iter
 		return nil, FailureOutcome{Kind: FailureBeforeFirstChunk, Err: fmt.Errorf("invalid response: status %d", resp.StatusCode)}
 	}
 
-	return c.readStream(ctx, resp), nil
+	return c.readStream(ctx, resp, started, inputCharacters), nil
+}
+
+func requestCharacters(messages []routing.Message) int {
+	characters := 0
+	for _, message := range messages {
+		characters += len(message.Content)
+	}
+	return characters
 }
 
 func (c *LocalClient) buildRequestBody(req routing.ChatRequest) (io.Reader, error) {
@@ -110,12 +122,14 @@ func (c *LocalClient) buildRequestBody(req routing.ChatRequest) (io.Reader, erro
 	return strings.NewReader(string(data)), nil
 }
 
-func (c *LocalClient) readStream(ctx context.Context, resp *http.Response) iter.Seq2[routing.Chunk, error] {
+func (c *LocalClient) readStream(ctx context.Context, resp *http.Response, started time.Time, inputCharacters int) iter.Seq2[routing.Chunk, error] {
 	return func(yield func(routing.Chunk, error) bool) {
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)
 		firstChunk := true
+		firstChunkAt := time.Time{}
+		outputCharacters := 0
 
 		for scanner.Scan() {
 			select {
@@ -135,6 +149,11 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response) iter.
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
+				if firstChunk {
+					yield(routing.Chunk{}, FailureOutcome{Kind: FailureBeforeFirstChunk, Err: fmt.Errorf("local model returned an empty response")})
+					return
+				}
+				logLocalResponseComplete(started, firstChunkAt, inputCharacters, outputCharacters)
 				return
 			}
 
@@ -163,8 +182,13 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response) iter.
 				continue
 			}
 
+			if firstChunk {
+				firstChunkAt = time.Now()
+				slog.Info("local response started", "first_token_duration", firstChunkAt.Sub(started), "input_characters", inputCharacters)
+			}
 			firstChunk = false
-			if !yield(routing.Chunk{Content: content}, nil) {
+			outputCharacters += len(content)
+			if !yield(routing.Chunk{Content: content, Provider: "local"}, nil) {
 				return
 			}
 		}
@@ -177,4 +201,20 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response) iter.
 			yield(routing.Chunk{}, FailureOutcome{Kind: kind, Err: fmt.Errorf("generation failure: %w", err)})
 		}
 	}
+}
+
+func logLocalResponseComplete(started, firstChunkAt time.Time, inputCharacters, outputCharacters int) {
+	duration := time.Since(started)
+	attributes := []any{
+		"duration", duration,
+		"input_characters", inputCharacters,
+		"output_characters", outputCharacters,
+	}
+	if !firstChunkAt.IsZero() {
+		generationDuration := time.Since(firstChunkAt)
+		if generationDuration > 0 {
+			attributes = append(attributes, "generation_characters_per_second", float64(outputCharacters)/generationDuration.Seconds())
+		}
+	}
+	slog.Info("local response complete", attributes...)
 }

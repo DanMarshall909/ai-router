@@ -12,11 +12,11 @@ import (
 
 func validStrategyMap() map[string]config.StrategyMapping {
 	return map[string]config.StrategyMapping{
-		"QuickLocal":    {Provider: "local", Model: "bonsai"},
-		"DeepLocal":     {Provider: "local", Model: "bonsai"},
-		"CloudGeneral":  {Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet"},
-		"CloudReasoning": {Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet"},
-		"CloudCoding":   {Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet"},
+		"QuickLocal":     {Provider: "local", Model: "bonsai"},
+		"DeepLocal":      {Provider: "local", Model: "bonsai"},
+		"CloudGeneral":   {Provider: "cloud", Model: "anthropic/claude-3.5-sonnet"},
+		"CloudReasoning": {Provider: "cloud", Model: "anthropic/claude-3.5-sonnet"},
+		"CloudCoding":    {Provider: "cloud", Model: "anthropic/claude-3.5-sonnet"},
 	}
 }
 
@@ -81,7 +81,7 @@ func TestValidateFailsOnUnmappedStrategy(t *testing.T) {
 func TestValidateFailsOnPlaceholderModel(t *testing.T) {
 	cfg := validConfig()
 	cfg.ModelRouting.Strategies["CloudGeneral"] = config.StrategyMapping{
-		Provider: "openrouter",
+		Provider: "cloud",
 		Model:    "<configure-me: see https://openrouter.ai/models>",
 	}
 	err := config.Validate(cfg)

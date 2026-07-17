@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ func NewOpenRouterClient(baseURL, apiKey string, modelMap map[string]string, tim
 // OpenRouterOption configures the OpenRouter client.
 type OpenRouterOption func(*OpenRouterClient)
 
-// WithAutoModel sets the auto-routing model (e.g. "openrouter/auto").
+// WithAutoModel sets the cloud provider's auto-routing model.
 func WithAutoModel(model string) OpenRouterOption {
 	return func(c *OpenRouterClient) { c.autoModel = model }
 }
@@ -72,6 +73,9 @@ func WithAllowedModels(patterns []string) OpenRouterOption {
 // Stream implements routing.ChatProvider.
 func (c *OpenRouterClient) Stream(ctx context.Context, req routing.ChatRequest) (iter.Seq2[routing.Chunk, error], error) {
 	model := req.Model
+	if model == "auto" && c.autoModel != "" {
+		model = c.autoModel
+	}
 	if mapped, ok := c.modelMap[model]; ok {
 		model = mapped
 	}
@@ -110,7 +114,7 @@ func (c *OpenRouterClient) Stream(ctx context.Context, req routing.ChatRequest) 
 		return nil, fmt.Errorf("unexpected status %d from OpenRouter", resp.StatusCode)
 	}
 
-	return c.readStream(ctx, resp), nil
+	return c.readStream(ctx, resp, model), nil
 }
 
 func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model string) (io.Reader, error) {
@@ -119,17 +123,17 @@ func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model strin
 		Content string `json:"content"`
 	}
 	type plugin struct {
-		ID                string   `json:"id"`
-		AllowedModels     []string `json:"allowed_models,omitempty"`
-		CostQualityTradeoff *int   `json:"cost_quality_tradeoff,omitempty"`
+		ID                  string   `json:"id"`
+		AllowedModels       []string `json:"allowed_models,omitempty"`
+		CostQualityTradeoff *int     `json:"cost_quality_tradeoff,omitempty"`
 	}
 	type request struct {
-		Model      string    `json:"model"`
-		Messages   []message `json:"messages"`
-		Stream     bool      `json:"stream"`
-		SessionID  string    `json:"session_id,omitempty"`
-		Fallbacks  []string  `json:"models,omitempty"`
-		Plugins    []plugin  `json:"plugins,omitempty"`
+		Model     string    `json:"model"`
+		Messages  []message `json:"messages"`
+		Stream    bool      `json:"stream"`
+		SessionID string    `json:"session_id,omitempty"`
+		Fallbacks []string  `json:"models,omitempty"`
+		Plugins   []plugin  `json:"plugins,omitempty"`
 	}
 
 	msgs := make([]message, len(req.Messages))
@@ -154,7 +158,7 @@ func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model strin
 	}
 
 	// Build plugins for auto router
-	if model == "openrouter/auto" || c.autoModel != "" {
+	if model == c.autoModel {
 		p := plugin{ID: "auto-router"}
 		if len(c.allowedModels) > 0 {
 			p.AllowedModels = c.allowedModels
@@ -172,11 +176,12 @@ func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model strin
 	return strings.NewReader(string(data)), nil
 }
 
-func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response) iter.Seq2[routing.Chunk, error] {
+func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response, model string) iter.Seq2[routing.Chunk, error] {
 	return func(yield func(routing.Chunk, error) bool) {
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)
+		loggedStart := false
 
 		for scanner.Scan() {
 			select {
@@ -196,6 +201,7 @@ func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response) 
 			}
 
 			var chunk struct {
+				Model   string `json:"model"`
 				Choices []struct {
 					Delta struct {
 						Content string `json:"content"`
@@ -215,8 +221,17 @@ func (c *OpenRouterClient) readStream(ctx context.Context, resp *http.Response) 
 			if content == "" {
 				continue
 			}
+			resolvedModel := model
+			if chunk.Model != "" {
+				resolvedModel = chunk.Model
+			}
+			if !loggedStart && resolvedModel != "" {
+				// Log once on first meaningful chunk so we can compare cloud start vs local readiness.
+				slog.Info("cloud response started", "model", resolvedModel)
+				loggedStart = true
+			}
 
-			if !yield(routing.Chunk{Content: content}, nil) {
+			if !yield(routing.Chunk{Content: content, Provider: "cloud", Model: resolvedModel}, nil) {
 				return
 			}
 		}

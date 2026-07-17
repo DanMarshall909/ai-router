@@ -13,52 +13,52 @@ import (
 
 // Key paths for localModel configuration.
 const (
-	KeyLocalModelExecutablePath    = "localModel.executablePath"
-	KeyLocalModelModelPath         = "localModel.modelPath"
-	KeyLocalModelHost              = "localModel.host"
-	KeyLocalModelPort              = "localModel.port"
-	KeyLocalModelStartupTimeout    = "localModel.startupTimeoutSeconds"
-	KeyLocalModelShutdownTimeout   = "localModel.shutdownTimeoutSeconds"
-	KeyLocalModelIdleTimeout       = "localModel.idleTimeoutMinutes"
-	KeyLocalModelAdditionalArgs    = "localModel.additionalArgs"
+	KeyLocalModelExecutablePath  = "localModel.executablePath"
+	KeyLocalModelModelPath       = "localModel.modelPath"
+	KeyLocalModelHost            = "localModel.host"
+	KeyLocalModelPort            = "localModel.port"
+	KeyLocalModelStartupTimeout  = "localModel.startupTimeoutSeconds"
+	KeyLocalModelShutdownTimeout = "localModel.shutdownTimeoutSeconds"
+	KeyLocalModelIdleTimeout     = "localModel.idleTimeoutMinutes"
+	KeyLocalModelAdditionalArgs  = "localModel.additionalArgs"
 )
 
 // Defaults for localModel.
 const (
-	DefaultLocalModelHost              = "127.0.0.1"
-	DefaultLocalModelPort              = 8080
-	DefaultLocalModelStartupTimeout    = 60 * time.Second
-	DefaultLocalModelShutdownTimeout   = 10 * time.Second
-	DefaultLocalModelIdleTimeout       = 5 * time.Minute
+	DefaultLocalModelHost            = "127.0.0.1"
+	DefaultLocalModelPort            = 8080
+	DefaultLocalModelStartupTimeout  = 60 * time.Second
+	DefaultLocalModelShutdownTimeout = 10 * time.Second
+	DefaultLocalModelIdleTimeout     = 0 // 0 = disabled
 )
 
 // Key paths for openRouter configuration.
 const (
-	KeyOpenRouterEnabled            = "openRouter.enabled"
-	KeyOpenRouterAPIKey             = "openRouter.apiKey"
-	KeyOpenRouterBaseURL            = "openRouter.baseUrl"
-	KeyOpenRouterTimeout            = "openRouter.timeoutSeconds"
-	KeyOpenRouterApplicationTitle   = "openRouter.applicationTitle"
-	KeyOpenRouterReferer            = "openRouter.referer"
-	KeyOpenRouterAutoModel          = "openRouter.autoModel"
-	KeyOpenRouterFallbacks          = "openRouter.fallbacks"
+	KeyOpenRouterEnabled             = "openRouter.enabled"
+	KeyOpenRouterAPIKey              = "openRouter.apiKey"
+	KeyOpenRouterBaseURL             = "openRouter.baseUrl"
+	KeyOpenRouterTimeout             = "openRouter.timeoutSeconds"
+	KeyOpenRouterApplicationTitle    = "openRouter.applicationTitle"
+	KeyOpenRouterReferer             = "openRouter.referer"
+	KeyOpenRouterAutoModel           = "openRouter.autoModel"
+	KeyOpenRouterFallbacks           = "openRouter.fallbacks"
 	KeyOpenRouterCostQualityTradeoff = "openRouter.costQualityTradeoff"
-	KeyOpenRouterAllowedModels      = "openRouter.allowedModels"
+	KeyOpenRouterAllowedModels       = "openRouter.allowedModels"
 )
 
 // Defaults for openRouter.
 const (
-	DefaultOpenRouterEnabled  = false
-	DefaultOpenRouterBaseURL  = "https://openrouter.ai/api/v1"
-	DefaultOpenRouterTimeout  = 30 * time.Second
+	DefaultOpenRouterEnabled = false
+	DefaultOpenRouterBaseURL = "https://openrouter.ai/api/v1"
+	DefaultOpenRouterTimeout = 30 * time.Second
 )
 
 // Key paths for routing configuration.
 const (
-	KeyRoutingMaxLocalInputTokens         = "routing.maxLocalInputTokens"
-	KeyRoutingComplexityThreshold         = "routing.complexityThreshold"
-	KeyRoutingEnableLocalSelfAssessment   = "routing.enableLocalSelfAssessment"
-	KeyRoutingAllowedOverrides            = "routing.allowedOverrides"
+	KeyRoutingMaxLocalInputTokens       = "routing.maxLocalInputTokens"
+	KeyRoutingComplexityThreshold       = "routing.complexityThreshold"
+	KeyRoutingEnableLocalSelfAssessment = "routing.enableLocalSelfAssessment"
+	KeyRoutingAllowedOverrides          = "routing.allowedOverrides"
 )
 
 // Defaults for routing.
@@ -91,47 +91,50 @@ const (
 
 // LocalModelConfig holds configuration for the local llama-server process.
 type LocalModelConfig struct {
-	ExecutablePath    string        `json:"executablePath"`
-	ModelPath         string        `json:"modelPath"`
-	Host              string        `json:"host"`
-	Port              int           `json:"port"`
-	StartupTimeout    time.Duration `json:"startupTimeoutSeconds"`
-	ShutdownTimeout   time.Duration `json:"shutdownTimeoutSeconds"`
-	IdleTimeout       time.Duration `json:"idleTimeoutMinutes"`
-	AdditionalArgs    []string      `json:"additionalArgs"`
-	LDLibraryPath     string        `json:"ldLibraryPath"`
+	ExecutablePath     string        `json:"executablePath"`
+	ModelPath          string        `json:"modelPath"`
+	Host               string        `json:"host"`
+	Port               int           `json:"port"`
+	StartupTimeout     time.Duration `json:"-"`
+	ShutdownTimeout    time.Duration `json:"-"`
+	IdleTimeout        time.Duration `json:"-"`
+	StartupTimeoutSec  int           `json:"startupTimeoutSeconds"`
+	ShutdownTimeoutSec int           `json:"shutdownTimeoutSeconds"`
+	IdleTimeoutMin     int           `json:"idleTimeoutMinutes"`
+	AdditionalArgs     []string      `json:"additionalArgs"`
+	LDLibraryPath      string        `json:"ldLibraryPath"`
 }
 
 // OpenRouterConfig holds configuration for the OpenRouter cloud provider.
 type OpenRouterConfig struct {
-	Enabled             bool          `json:"enabled"`
-	APIKey              string        `json:"apiKey"`
-	BaseURL             string        `json:"baseUrl"`
-	Timeout             time.Duration `json:"timeoutSeconds"`
-	ApplicationTitle    string        `json:"applicationTitle"`
-	Referer             string        `json:"referer"`
+	Enabled             bool              `json:"enabled"`
+	APIKey              string            `json:"apiKey"`
+	BaseURL             string            `json:"baseUrl"`
+	Timeout             time.Duration     `json:"timeoutSeconds"`
+	ApplicationTitle    string            `json:"applicationTitle"`
+	Referer             string            `json:"referer"`
 	Models              map[string]string `json:"models"`
-	AutoModel           string        `json:"autoModel"`
-	Fallbacks           []string      `json:"fallbacks"`
-	CostQualityTradeoff int           `json:"costQualityTradeoff"`
-	AllowedModels       []string      `json:"allowedModels"`
+	AutoModel           string            `json:"autoModel"`
+	Fallbacks           []string          `json:"fallbacks"`
+	CostQualityTradeoff int               `json:"costQualityTradeoff"`
+	AllowedModels       []string          `json:"allowedModels"`
 }
 
 // RoutingConfig holds configuration for the routing policy.
 type RoutingConfig struct {
-	MaxLocalInputTokens         int      `json:"maxLocalInputTokens"`
-	ComplexityThreshold         float64  `json:"complexityThreshold"`
-	EnableLocalSelfAssessment   bool     `json:"enableLocalSelfAssessment"`
-	AllowedOverrides            []string `json:"allowedOverrides"`
+	MaxLocalInputTokens       int      `json:"maxLocalInputTokens"`
+	ComplexityThreshold       float64  `json:"complexityThreshold"`
+	EnableLocalSelfAssessment bool     `json:"enableLocalSelfAssessment"`
+	AllowedOverrides          []string `json:"allowedOverrides"`
 }
 
 // ShellToolConfig holds configuration for the shell-command tool.
 type ShellToolConfig struct {
-	Enabled                 bool          `json:"enabled"`
-	AllowedWorkingDirectories []string    `json:"allowedWorkingDirectories"`
-	AllowedCommands         []string      `json:"allowedCommands"`
-	Timeout                 time.Duration `json:"timeoutSeconds"`
-	MaximumOutputCharacters int           `json:"maximumOutputCharacters"`
+	Enabled                   bool          `json:"enabled"`
+	AllowedWorkingDirectories []string      `json:"allowedWorkingDirectories"`
+	AllowedCommands           []string      `json:"allowedCommands"`
+	Timeout                   time.Duration `json:"timeoutSeconds"`
+	MaximumOutputCharacters   int           `json:"maximumOutputCharacters"`
 }
 
 // StrategyMapping maps an inference strategy to a provider and model.
@@ -161,9 +164,9 @@ const PlaceholderPrefix = "<configure-me:"
 // Placeholder models are values that must be replaced before use.
 // Task 2.5 requires startup to reject them.
 var PlaceholderModels = map[string]string{
-	string(routing.CloudGeneral):  "<configure-me: see https://openrouter.ai/models>",
+	string(routing.CloudGeneral):   "<configure-me: see https://openrouter.ai/models>",
 	string(routing.CloudReasoning): "<configure-me: see https://openrouter.ai/models>",
-	string(routing.CloudCoding):   "<configure-me: see https://openrouter.ai/models>",
+	string(routing.CloudCoding):    "<configure-me: see https://openrouter.ai/models>",
 }
 
 // Load reads a config.json file, applies environment variable overrides,
@@ -179,6 +182,12 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("parsing config file %s: %w", path, err)
 	}
+
+	// Convert timeout fields from integer units to time.Duration
+	cfg.LocalModel.StartupTimeout = time.Duration(cfg.LocalModel.StartupTimeoutSec) * time.Second
+	cfg.LocalModel.ShutdownTimeout = time.Duration(cfg.LocalModel.ShutdownTimeoutSec) * time.Second
+	cfg.LocalModel.IdleTimeout = time.Duration(cfg.LocalModel.IdleTimeoutMin) * time.Minute
+	cfg.OpenRouter.Timeout = time.Duration(cfg.OpenRouter.Timeout) * time.Second
 
 	applyEnvOverrides(&cfg)
 
@@ -269,8 +278,8 @@ func Validate(cfg Config) error {
 	if cfg.LocalModel.ShutdownTimeout <= 0 {
 		return fmt.Errorf("validation failed: %s must be positive", KeyLocalModelShutdownTimeout)
 	}
-	if cfg.LocalModel.IdleTimeout <= 0 {
-		return fmt.Errorf("validation failed: %s must be positive", KeyLocalModelIdleTimeout)
+	if cfg.LocalModel.IdleTimeout < 0 {
+		return fmt.Errorf("validation failed: %s must be non-negative (0 = disabled)", KeyLocalModelIdleTimeout)
 	}
 
 	if cfg.OpenRouter.Enabled && cfg.OpenRouter.APIKey == "" {
@@ -294,7 +303,7 @@ func Validate(cfg Config) error {
 			return fmt.Errorf("validation failed: %s has no mapping for strategy %q", KeyModelRoutingStrategies, strategy)
 		}
 		if isPlaceholder(mapping.Model) {
-			return fmt.Errorf("validation failed: %s maps strategy %q to placeholder model %q; replace it with a real OpenRouter model identifier (see https://openrouter.ai/models)", KeyModelRoutingStrategies, strategy, mapping.Model)
+			return fmt.Errorf("validation failed: %s maps strategy %q to placeholder model %q; replace it with a model identifier for the configured cloud provider", KeyModelRoutingStrategies, strategy, mapping.Model)
 		}
 	}
 
@@ -309,12 +318,15 @@ func isPlaceholder(s string) bool {
 func DefaultConfig() Config {
 	return Config{
 		LocalModel: LocalModelConfig{
-			Host:           DefaultLocalModelHost,
-			Port:           DefaultLocalModelPort,
-			StartupTimeout: DefaultLocalModelStartupTimeout,
-			ShutdownTimeout: DefaultLocalModelShutdownTimeout,
-			IdleTimeout:    DefaultLocalModelIdleTimeout,
-			AdditionalArgs: []string{},
+			Host:               DefaultLocalModelHost,
+			Port:               DefaultLocalModelPort,
+			StartupTimeout:     DefaultLocalModelStartupTimeout,
+			ShutdownTimeout:    DefaultLocalModelShutdownTimeout,
+			IdleTimeout:        DefaultLocalModelIdleTimeout,
+			StartupTimeoutSec:  int(DefaultLocalModelStartupTimeout / time.Second),
+			ShutdownTimeoutSec: int(DefaultLocalModelShutdownTimeout / time.Second),
+			IdleTimeoutMin:     int(DefaultLocalModelIdleTimeout / time.Minute),
+			AdditionalArgs:     []string{},
 		},
 		OpenRouter: OpenRouterConfig{
 			Enabled: DefaultOpenRouterEnabled,
@@ -329,11 +341,11 @@ func DefaultConfig() Config {
 			AllowedOverrides:          []string{},
 		},
 		ShellTool: ShellToolConfig{
-			Enabled:                 DefaultShellToolEnabled,
+			Enabled:                   DefaultShellToolEnabled,
 			AllowedWorkingDirectories: []string{},
-			AllowedCommands:         []string{},
-			Timeout:                 DefaultShellToolTimeout,
-			MaximumOutputCharacters: DefaultShellToolMaximumOutputCharacters,
+			AllowedCommands:           []string{},
+			Timeout:                   DefaultShellToolTimeout,
+			MaximumOutputCharacters:   DefaultShellToolMaximumOutputCharacters,
 		},
 		ModelRouting: ModelRoutingConfig{
 			Strategies: map[string]StrategyMapping{},
