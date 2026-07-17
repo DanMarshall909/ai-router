@@ -16,17 +16,21 @@ import (
 
 // OpenRouterClient talks to the OpenRouter API.
 type OpenRouterClient struct {
-	baseURL    string
-	apiKey     string
-	modelMap   map[string]string // strategy -> model identifier
-	httpClient *http.Client
-	appTitle   string
-	referer    string
+	baseURL             string
+	apiKey              string
+	modelMap            map[string]string // strategy -> model identifier
+	httpClient          *http.Client
+	appTitle            string
+	referer             string
+	autoModel           string
+	fallbacks           []string
+	costQualityTradeoff int
+	allowedModels       []string
 }
 
 // NewOpenRouterClient creates a client from the given parameters.
-func NewOpenRouterClient(baseURL, apiKey string, modelMap map[string]string, timeout time.Duration, appTitle, referer string) *OpenRouterClient {
-	return &OpenRouterClient{
+func NewOpenRouterClient(baseURL, apiKey string, modelMap map[string]string, timeout time.Duration, appTitle, referer string, opts ...OpenRouterOption) *OpenRouterClient {
+	c := &OpenRouterClient{
 		baseURL:  strings.TrimRight(baseURL, "/"),
 		apiKey:   apiKey,
 		modelMap: modelMap,
@@ -36,6 +40,33 @@ func NewOpenRouterClient(baseURL, apiKey string, modelMap map[string]string, tim
 		appTitle: appTitle,
 		referer:  referer,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// OpenRouterOption configures the OpenRouter client.
+type OpenRouterOption func(*OpenRouterClient)
+
+// WithAutoModel sets the auto-routing model (e.g. "openrouter/auto").
+func WithAutoModel(model string) OpenRouterOption {
+	return func(c *OpenRouterClient) { c.autoModel = model }
+}
+
+// WithFallbacks sets the fallback model chain.
+func WithFallbacks(fallbacks []string) OpenRouterOption {
+	return func(c *OpenRouterClient) { c.fallbacks = fallbacks }
+}
+
+// WithCostQualityTradeoff sets the cost/quality tradeoff (0-10).
+func WithCostQualityTradeoff(tradeoff int) OpenRouterOption {
+	return func(c *OpenRouterClient) { c.costQualityTradeoff = tradeoff }
+}
+
+// WithAllowedModels sets the allowed model patterns for auto routing.
+func WithAllowedModels(patterns []string) OpenRouterOption {
+	return func(c *OpenRouterClient) { c.allowedModels = patterns }
 }
 
 // Stream implements routing.ChatProvider.
@@ -87,10 +118,18 @@ func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model strin
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	}
+	type plugin struct {
+		ID                string   `json:"id"`
+		AllowedModels     []string `json:"allowed_models,omitempty"`
+		CostQualityTradeoff *int   `json:"cost_quality_tradeoff,omitempty"`
+	}
 	type request struct {
-		Model    string    `json:"model"`
-		Messages []message `json:"messages"`
-		Stream   bool      `json:"stream"`
+		Model      string    `json:"model"`
+		Messages   []message `json:"messages"`
+		Stream     bool      `json:"stream"`
+		SessionID  string    `json:"session_id,omitempty"`
+		Fallbacks  []string  `json:"models,omitempty"`
+		Plugins    []plugin  `json:"plugins,omitempty"`
 	}
 
 	msgs := make([]message, len(req.Messages))
@@ -99,9 +138,31 @@ func (c *OpenRouterClient) buildRequestBody(req routing.ChatRequest, model strin
 	}
 
 	r := request{
-		Model:    model,
-		Messages: msgs,
-		Stream:   true,
+		Model:     model,
+		Messages:  msgs,
+		Stream:    true,
+		SessionID: req.SessionID,
+	}
+
+	// Use request-level fallbacks, then client defaults
+	fallbacks := req.Fallbacks
+	if len(fallbacks) == 0 {
+		fallbacks = c.fallbacks
+	}
+	if len(fallbacks) > 0 {
+		r.Fallbacks = fallbacks
+	}
+
+	// Build plugins for auto router
+	if model == "openrouter/auto" || c.autoModel != "" {
+		p := plugin{ID: "auto-router"}
+		if len(c.allowedModels) > 0 {
+			p.AllowedModels = c.allowedModels
+		}
+		if c.costQualityTradeoff > 0 {
+			p.CostQualityTradeoff = &c.costQualityTradeoff
+		}
+		r.Plugins = []plugin{p}
 	}
 
 	data, err := json.Marshal(r)

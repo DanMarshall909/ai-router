@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -116,12 +117,20 @@ func (m *Manager) Start(ctx context.Context) error {
 }
 
 func (m *Manager) doStart(ctx context.Context) (any, error) {
+	slog.Info("starting local model", "executable", m.cfg.ExecutablePath, "model", m.cfg.ModelPath)
 	m.setState(routing.StateStarting)
 
 	args := buildArgs(m.cfg)
-	proc := m.procFac.NewProcess(m.cfg.ExecutablePath, args...)
+	var proc Process
+	if m.cfg.LDLibraryPath != "" {
+		env := []string{"LD_LIBRARY_PATH=" + m.cfg.LDLibraryPath}
+		proc = m.procFac.NewProcessWithEnv(m.cfg.ExecutablePath, env, args...)
+	} else {
+		proc = m.procFac.NewProcess(m.cfg.ExecutablePath, args...)
+	}
 
 	if err := proc.Start(ctx); err != nil {
+		slog.Error("failed to start process", "err", err)
 		m.setState(routing.StateFaulted)
 		return nil, fmt.Errorf("starting process: %w", err)
 	}
@@ -131,24 +140,28 @@ func (m *Manager) doStart(ctx context.Context) (any, error) {
 	m.pid = proc.Pid()
 	m.mu.Unlock()
 
+	slog.Info("process started", "pid", m.pid)
+
 	// Single exit watcher: drains the Wait channel exactly once.
 	go m.watchExit(proc)
 
 	// Wait for readiness
 	if err := m.waitForReady(ctx); err != nil {
+		slog.Error("readiness check failed", "err", err)
 		proc.Kill()
 		<-m.exitCh
 		m.setState(routing.StateFaulted)
 		return nil, err
 	}
 
+	slog.Info("local model ready", "pid", m.pid)
 	m.setState(routing.StateReady)
 	return nil, nil
 }
 
 func buildArgs(cfg config.LocalModelConfig) []string {
 	args := []string{
-		"--model", cfg.ModelPath,
+		"-m", cfg.ModelPath,
 		"--host", cfg.Host,
 		"--port", fmt.Sprintf("%d", cfg.Port),
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"log/slog"
 
 	"github.com/DanMarshall909/ai-router/internal/local"
 	"github.com/DanMarshall909/ai-router/internal/routing"
@@ -30,10 +31,33 @@ func NewDispatcher(localProvider, cloudProvider routing.ChatProvider, mgr *local
 func (d *Dispatcher) Dispatch(ctx context.Context, req routing.ChatRequest, decision routing.RoutingDecision) (iter.Seq2[routing.Chunk, error], error) {
 	isLocal := decision.Strategy == routing.QuickLocal || decision.Strategy == routing.DeepLocal
 
+	slog.Debug("dispatching request",
+		"model", req.Model,
+		"strategy", decision.Strategy,
+		"provider", decision.Provider,
+		"stream", req.Stream,
+		"messages", len(req.Messages),
+	)
+
 	if isLocal && d.local != nil {
+		// Ensure the local model process is running
+		if d.manager != nil {
+			if err := d.manager.Start(ctx); err != nil {
+				slog.Warn("failed to start local model, trying cloud", "err", err)
+				if d.cloud != nil {
+					return d.cloud.Stream(ctx, req)
+				}
+				return nil, fmt.Errorf("local model failed to start and no cloud provider: %w", err)
+			}
+			d.manager.RequestBegin()
+			defer d.manager.RequestEnd()
+		}
+
 		stream, err := d.local.Stream(ctx, req)
 		if err != nil {
+			slog.Warn("local provider failed", "err", err)
 			if d.cloud != nil && d.isPreFirstChunkError(err) {
+				slog.Info("falling back to cloud", "reason", "pre-first-chunk local failure")
 				decision.IsFallback = true
 				return d.cloud.Stream(ctx, req)
 			}
@@ -43,6 +67,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req routing.ChatRequest, deci
 	}
 
 	if d.cloud != nil {
+		slog.Debug("routing to cloud provider")
 		return d.cloud.Stream(ctx, req)
 	}
 
@@ -62,9 +87,14 @@ func (d *Dispatcher) wrapLocalWithFallback(
 		for chunk, err := range localStream {
 			if err != nil {
 				if firstChunk && d.cloud != nil && d.isPreFirstChunkError(err) {
+					slog.Warn("local failed before first chunk, falling back to cloud",
+						"err", err,
+						"model", req.Model,
+					)
 					decision.IsFallback = true
 					cloudStream, cloudErr := d.cloud.Stream(ctx, req)
 					if cloudErr != nil {
+						slog.Error("cloud fallback also failed", "err", cloudErr)
 						yield(routing.Chunk{}, cloudErr)
 						return
 					}

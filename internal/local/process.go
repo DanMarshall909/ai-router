@@ -38,12 +38,16 @@ type Process interface {
 type ProcessFactory interface {
 	// NewProcess creates a new Process for the given command.
 	NewProcess(name string, args ...string) Process
+
+	// NewProcessWithEnv creates a new Process with environment variables.
+	NewProcessWithEnv(name string, env []string, args ...string) Process
 }
 
 // execProcess is the real Process implementation wrapping os/exec.
 type execProcess struct {
 	name string
 	args []string
+	env  []string
 
 	cmd        *exec.Cmd
 	stdoutPipe io.ReadCloser
@@ -63,8 +67,15 @@ func (f *execFactory) NewProcess(name string, args ...string) Process {
 	return &execProcess{name: name, args: args}
 }
 
+func (f *execFactory) NewProcessWithEnv(name string, env []string, args ...string) Process {
+	return &execProcess{name: name, args: args, env: env}
+}
+
 func (p *execProcess) Start(ctx context.Context) error {
 	p.cmd = exec.CommandContext(ctx, p.name, p.args...)
+	if len(p.env) > 0 {
+		p.cmd.Env = append(p.cmd.Environ(), p.env...)
+	}
 
 	var err error
 	p.stdoutPipe, err = p.cmd.StdoutPipe()

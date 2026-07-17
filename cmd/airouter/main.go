@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -16,14 +16,26 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.json", "path to config.json")
+	configPath := flag.String("config", defaultConfigPath(), "path to config.json")
 	flag.Parse()
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
+		slog.Error("configuration error", "err", err)
 		os.Exit(1)
 	}
+
+	slog.Info("config loaded",
+		"executable", cfg.LocalModel.ExecutablePath,
+		"model", cfg.LocalModel.ModelPath,
+		"host", cfg.LocalModel.Host,
+		"port", cfg.LocalModel.Port,
+		"cloud_enabled", cfg.OpenRouter.Enabled,
+	)
 
 	// Create process manager
 	procFac := local.NewExecFactory()
@@ -36,6 +48,19 @@ func main() {
 	// Create cloud client (if enabled)
 	var cloudClient routing.ChatProvider
 	if cfg.OpenRouter.Enabled {
+		var opts []cloud.OpenRouterOption
+		if cfg.OpenRouter.AutoModel != "" {
+			opts = append(opts, cloud.WithAutoModel(cfg.OpenRouter.AutoModel))
+		}
+		if len(cfg.OpenRouter.Fallbacks) > 0 {
+			opts = append(opts, cloud.WithFallbacks(cfg.OpenRouter.Fallbacks))
+		}
+		if cfg.OpenRouter.CostQualityTradeoff > 0 {
+			opts = append(opts, cloud.WithCostQualityTradeoff(cfg.OpenRouter.CostQualityTradeoff))
+		}
+		if len(cfg.OpenRouter.AllowedModels) > 0 {
+			opts = append(opts, cloud.WithAllowedModels(cfg.OpenRouter.AllowedModels))
+		}
 		cloudClient = cloud.NewOpenRouterClient(
 			cfg.OpenRouter.BaseURL,
 			cfg.OpenRouter.APIKey,
@@ -43,7 +68,9 @@ func main() {
 			time.Duration(cfg.OpenRouter.Timeout),
 			cfg.OpenRouter.ApplicationTitle,
 			cfg.OpenRouter.Referer,
+			opts...,
 		)
+		slog.Info("cloud provider enabled", "base_url", cfg.OpenRouter.BaseURL)
 	}
 
 	// Wire dispatcher and handler
@@ -53,12 +80,11 @@ func main() {
 	h.RegisterRoutes(mux)
 
 	addr := fmt.Sprintf("%s:%d", cfg.LocalModel.Host, cfg.LocalModel.Port+1)
-	log.Printf("ai-router starting on %s", addr)
-	log.Printf("local model: %s", cfg.LocalModel.ExecutablePath)
-	log.Printf("cloud enabled: %v", cfg.OpenRouter.Enabled)
+	slog.Info("ai-router starting", "addr", addr)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("server error: %v", err)
+		slog.Error("server error", "err", err)
+		os.Exit(1)
 	}
 }
 
@@ -70,4 +96,11 @@ func cloudModelMap(cfg config.Config) map[string]string {
 		}
 	}
 	return m
+}
+
+func defaultConfigPath() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		return home + "/.config/ai-router/config.json"
+	}
+	return "config.json"
 }

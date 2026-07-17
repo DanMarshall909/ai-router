@@ -40,6 +40,10 @@ const (
 	KeyOpenRouterTimeout            = "openRouter.timeoutSeconds"
 	KeyOpenRouterApplicationTitle   = "openRouter.applicationTitle"
 	KeyOpenRouterReferer            = "openRouter.referer"
+	KeyOpenRouterAutoModel          = "openRouter.autoModel"
+	KeyOpenRouterFallbacks          = "openRouter.fallbacks"
+	KeyOpenRouterCostQualityTradeoff = "openRouter.costQualityTradeoff"
+	KeyOpenRouterAllowedModels      = "openRouter.allowedModels"
 )
 
 // Defaults for openRouter.
@@ -95,17 +99,22 @@ type LocalModelConfig struct {
 	ShutdownTimeout   time.Duration `json:"shutdownTimeoutSeconds"`
 	IdleTimeout       time.Duration `json:"idleTimeoutMinutes"`
 	AdditionalArgs    []string      `json:"additionalArgs"`
+	LDLibraryPath     string        `json:"ldLibraryPath"`
 }
 
 // OpenRouterConfig holds configuration for the OpenRouter cloud provider.
 type OpenRouterConfig struct {
-	Enabled          bool          `json:"enabled"`
-	APIKey           string        `json:"apiKey"`
-	BaseURL          string        `json:"baseUrl"`
-	Timeout          time.Duration `json:"timeoutSeconds"`
-	ApplicationTitle string        `json:"applicationTitle"`
-	Referer          string        `json:"referer"`
-	Models           map[string]string `json:"models"`
+	Enabled             bool          `json:"enabled"`
+	APIKey              string        `json:"apiKey"`
+	BaseURL             string        `json:"baseUrl"`
+	Timeout             time.Duration `json:"timeoutSeconds"`
+	ApplicationTitle    string        `json:"applicationTitle"`
+	Referer             string        `json:"referer"`
+	Models              map[string]string `json:"models"`
+	AutoModel           string        `json:"autoModel"`
+	Fallbacks           []string      `json:"fallbacks"`
+	CostQualityTradeoff int           `json:"costQualityTradeoff"`
+	AllowedModels       []string      `json:"allowedModels"`
 }
 
 // RoutingConfig holds configuration for the routing policy.

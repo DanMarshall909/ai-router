@@ -62,6 +62,10 @@ func (f *FakeProcessFactory) NewProcess(name string, args ...string) Process {
 	return fp
 }
 
+func (f *FakeProcessFactory) NewProcessWithEnv(name string, env []string, args ...string) Process {
+	return f.NewProcess(name, args...)
+}
+
 func (f *FakeProcessFactory) StartCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -15,9 +15,11 @@ type ChatProvider interface {
 
 // ChatRequest is an OpenAI-compatible chat completion request.
 type ChatRequest struct {
-	Model    string
-	Messages []Message
-	Stream   bool
+	Model      string
+	Messages   []Message
+	Stream     bool
+	SessionID  string
+	Fallbacks  []string
 }
 
 // Message represents a single chat message.

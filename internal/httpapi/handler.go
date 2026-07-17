@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -43,23 +44,27 @@ func (h *Handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	var req ChatCompletionRequest
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		slog.Warn("failed to read request body", "err", err)
 		http.Error(w, `{"error":"failed to read body"}`, http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
 	if err := json.Unmarshal(body, &req); err != nil {
+		slog.Warn("invalid JSON", "err", err)
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
 
 	if len(req.Messages) == 0 {
+		slog.Warn("empty messages array")
 		http.Error(w, `{"error":"messages array must not be empty"}`, http.StatusBadRequest)
 		return
 	}
 
 	for _, m := range req.Messages {
 		if m.Role != "system" && m.Role != "user" && m.Role != "assistant" {
+			slog.Warn("unknown role", "role", m.Role)
 			http.Error(w, fmt.Sprintf(`{"error":"unknown role %q"}`, m.Role), http.StatusBadRequest)
 			return
 		}
@@ -90,9 +95,17 @@ func (h *Handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		decision.Model = req.Model
 	}
 
+	slog.Info("request received",
+		"model", req.Model,
+		"strategy", decision.Strategy,
+		"stream", stream,
+		"messages", len(req.Messages),
+	)
+
 	ctx := r.Context()
 	streamIter, err := h.dispatcher.Dispatch(ctx, routingReq, decision)
 	if err != nil {
+		slog.Error("dispatch failed", "err", err)
 		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, escapeJSON(err.Error())), http.StatusServiceUnavailable)
 		return
 	}
