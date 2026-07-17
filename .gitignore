@@ -1,0 +1,20 @@
+# Build output
+/airouter
+*.exe
+
+# Local configuration that may carry keys
+config.json
+config.local.json
+
+# Go
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

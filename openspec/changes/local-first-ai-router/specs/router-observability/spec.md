@@ -19,7 +19,7 @@ Logs SHALL NOT contain API keys, authorization headers, complete email or person
 - **THEN** API keys, authorization headers, and full prompt content are absent
 
 ### Requirement: Metrics counters
-The router SHALL publish `System.Diagnostics.Metrics` counters (or equivalent in-memory metrics) for local requests, cloud requests, local startup count, local startup failures, fallbacks, local model unloads, routing decisions by strategy, and request latency. Latency SHALL be recorded as both time-to-first-chunk and total duration, because the first is what a streaming client perceives.
+The router SHALL publish in-memory metrics counters for local requests, cloud requests, local startup count, local startup failures, fallbacks, local model unloads, routing decisions by strategy, and request latency. Latency SHALL be recorded as both time-to-first-chunk and total duration, because the first is what a streaming client perceives.
 
 #### Scenario: Time to first chunk recorded separately
 - **WHEN** a streaming request is served after a cold local start

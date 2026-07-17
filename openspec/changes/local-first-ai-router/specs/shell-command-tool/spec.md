@@ -8,7 +8,7 @@ The router SHALL provide a single proof-of-concept tool named `execute_shell_com
 - **THEN** no process is started and the response describes what would have run
 
 ### Requirement: Shell execution is disabled by default
-Shell execution SHALL be disabled unless explicitly enabled in configuration (`ShellTool:Enabled`).
+Shell execution SHALL be disabled unless explicitly enabled in configuration (`shellTool.enabled`).
 
 #### Scenario: Rejected under default configuration
 - **WHEN** a shell-command request is made under default configuration
@@ -18,7 +18,7 @@ Shell execution SHALL be disabled unless explicitly enabled in configuration (`S
 Execution SHALL be confined to configured allow-listed working directories. Attempts to escape an allowed directory, including via path traversal, SHALL be rejected before any process starts.
 
 #### Scenario: Directory outside the allow list
-- **WHEN** execution is requested with a working directory outside `ShellTool:AllowedWorkingDirectories`
+- **WHEN** execution is requested with a working directory outside `shellTool.allowedWorkingDirectories`
 - **THEN** execution is rejected and no process is started
 
 #### Scenario: Path traversal rejected
@@ -29,7 +29,7 @@ Execution SHALL be confined to configured allow-listed working directories. Atte
 Commands on the configured unattended allow list SHALL run without confirmation. Commands that are not allow-listed and not explicitly blocked SHALL return a `confirmation_required` pending-action object containing a generated `actionId` and a human-readable `summary`, and SHALL start no process. Confirmation SHALL be represented as an explicit API state and SHALL NOT be simulated.
 
 #### Scenario: Allow-listed command runs
-- **WHEN** shell execution is enabled, `dotnet --info` is allow-listed, and the tool is invoked inside an allowed directory
+- **WHEN** shell execution is enabled, `go version` is allow-listed, and the tool is invoked inside an allowed directory
 - **THEN** the command runs and stdout, stderr, and exit code are returned separately
 
 #### Scenario: Non-allow-listed command requires confirmation
@@ -63,7 +63,7 @@ The proof of concept SHALL block known destructive patterns, including disk form
 - **THEN** it is rejected outright and is not offered as a confirmable pending action
 
 ### Requirement: Bounded execution and output capture
-Execution SHALL enforce a configurable timeout, cap captured output at `ShellTool:MaximumOutputCharacters`, and return stdout, stderr, and exit code separately. Command metadata SHALL be logged without leaking credentials or command output that may contain secrets.
+Execution SHALL enforce a configurable timeout, cap captured output at `shellTool.maximumOutputCharacters`, and return stdout, stderr, and exit code separately. Command metadata SHALL be logged without leaking credentials or command output that may contain secrets.
 
 #### Scenario: Timeout enforced
 - **WHEN** a permitted command exceeds its timeout

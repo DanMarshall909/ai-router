@@ -1,0 +1,43 @@
+{
+  "localModel": {
+    "executablePath": "/usr/bin/llama-server",
+    "modelPath": "/path/to/your/model.gguf",
+    "host": "127.0.0.1",
+    "port": 8080,
+    "startupTimeoutSeconds": 60000000000,
+    "shutdownTimeoutSeconds": 10000000000,
+    "idleTimeoutMinutes": 300000000000,
+    "additionalArgs": []
+  },
+  "openRouter": {
+    "enabled": false,
+    "apiKey": "",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "timeoutSeconds": 30000000000,
+    "applicationTitle": "",
+    "referer": "",
+    "models": {}
+  },
+  "routing": {
+    "maxLocalInputTokens": 4096,
+    "complexityThreshold": 0.7,
+    "enableLocalSelfAssessment": false,
+    "allowedOverrides": []
+  },
+  "shellTool": {
+    "enabled": false,
+    "allowedWorkingDirectories": [],
+    "allowedCommands": [],
+    "timeoutSeconds": 30000000000,
+    "maximumOutputCharacters": 10000
+  },
+  "modelRouting": {
+    "strategies": {
+      "QuickLocal": { "provider": "local", "model": "bonsai" },
+      "DeepLocal": { "provider": "local", "model": "bonsai" },
+      "CloudGeneral": { "provider": "openrouter", "model": "<configure-me: see https://openrouter.ai/models>" },
+      "CloudReasoning": { "provider": "openrouter", "model": "<configure-me: see https://openrouter.ai/models>" },
+      "CloudCoding": { "provider": "openrouter", "model": "<configure-me: see https://openrouter.ai/models>" }
+    }
+  }
+}

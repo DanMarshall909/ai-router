@@ -34,18 +34,18 @@ All configuration SHALL be validated at startup with useful error messages namin
 - **THEN** startup succeeds, because OpenRouter configuration is not required in that mode
 
 #### Scenario: Enabled cloud requires a key
-- **WHEN** `OpenRouter:Enabled` is true and no API key is available from configuration, environment, or user secrets
+- **WHEN** `openRouter.enabled` is true and no API key is available from configuration or the environment
 - **THEN** startup fails with a message explaining how to supply the key without committing it
 
 ### Requirement: Secrets are never committed
-The repository SHALL ship `appsettings.example.json` without secrets, and `.gitignore` SHALL exclude local settings files that may carry keys.
+The repository SHALL ship `config.example.json` without secrets, and `.gitignore` SHALL exclude local configuration files that may carry keys.
 
 #### Scenario: Example config carries no key
 - **WHEN** the example configuration is inspected
-- **THEN** the OpenRouter API key field is empty and documentation directs the reader to environment variables or user secrets
+- **THEN** the OpenRouter API key field is empty and documentation directs the reader to environment variables
 
 ### Requirement: Example model identifiers are unusable placeholders
-`appsettings.example.json` SHALL NOT contain real cloud model identifiers. Each cloud strategy mapping SHALL carry an obvious placeholder that fails startup validation with a message directing the reader to the provider's model catalogue. Model identifiers age out, and a stale-but-plausible default would route silently to the wrong model.
+`config.example.json` SHALL NOT contain real cloud model identifiers. Each cloud strategy mapping SHALL carry an obvious placeholder that fails startup validation with a message directing the reader to the provider's model catalogue. Model identifiers age out, and a stale-but-plausible default would route silently to the wrong model.
 
 #### Scenario: Unmodified example fails to start
 - **WHEN** the example configuration is used verbatim with cloud enabled

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: On-demand local model startup
-An `ILocalModelProcessManager` SHALL start the configured `llama-server` executable when a local-eligible request arrives and the model is stopped, wait for the llama.cpp HTTP health endpoint to report readiness, and only then forward the request. It SHALL wait no longer than the configured startup timeout. Arguments SHALL be passed as individual argument-list entries, never by building a command string.
+A local model manager SHALL start the configured `llama-server` executable when a local-eligible request arrives and the model is stopped, wait for the llama.cpp HTTP health endpoint to report readiness, and only then forward the request. It SHALL wait no longer than the configured startup timeout. Arguments SHALL be passed as individual argument-list entries, never by building a command string.
 
 #### Scenario: Starts once and forwards locally
 - **WHEN** the local model is stopped and a local-eligible chat request arrives

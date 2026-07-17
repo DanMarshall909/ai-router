@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Routing produces an inference strategy, not a model name
-The routing policy SHALL return an `InferenceStrategy` value from the set `QuickLocal`, `DeepLocal`, `CloudGeneral`, `CloudReasoning`, `CloudCoding`. Concrete providers and model identifiers SHALL be resolved from configuration (`ModelRouting:Strategies`), so models can change without modifying routing code. No cloud model identifier SHALL be hard-coded in source.
+The routing policy SHALL return an `InferenceStrategy` value from the set `QuickLocal`, `DeepLocal`, `CloudGeneral`, `CloudReasoning`, `CloudCoding`. Concrete providers and model identifiers SHALL be resolved from configuration (`modelRouting.strategies`), so models can change without modifying routing code. No cloud model identifier SHALL be hard-coded in source.
 
 #### Scenario: Strategy maps to a configured model
 - **WHEN** the policy selects `CloudReasoning` and configuration maps that strategy to a provider and model
@@ -27,7 +27,7 @@ Routing SHALL be deterministic for a given request and system state. The policy 
 - **THEN** the policy selects the configured cloud reasoning or cloud coding strategy, subject to privacy policy
 
 #### Scenario: Oversized input escalates to cloud
-- **WHEN** the approximate input token count exceeds `Routing:MaxLocalInputTokens`
+- **WHEN** the approximate input token count exceeds `routing.maxLocalInputTokens`
 - **THEN** the policy does not select a local strategy
 
 ### Requirement: Every request records a routing decision
@@ -56,7 +56,7 @@ When cloud access is disabled by configuration, the router SHALL NOT transmit an
 - **THEN** the router returns a clear service-unavailable response and no outbound cloud request is made
 
 ### Requirement: Optional local self-assessment is advisory only
-The router MAY support a second-stage local self-assessment in which the local model is asked, via a small classification prompt, to return strict JSON naming one of the five strategies. This SHALL be disabled by default (`Routing:EnableLocalSelfAssessment`). The deterministic router SHALL remain authoritative: the classifier MAY recommend escalation but SHALL NOT bypass privacy, cost, or security policy. A classification request SHALL NOT trigger another classification request.
+The router MAY support a second-stage local self-assessment in which the local model is asked, via a small classification prompt, to return strict JSON naming one of the five strategies. This SHALL be disabled by default (`routing.enableLocalSelfAssessment`). The deterministic router SHALL remain authoritative: the classifier MAY recommend escalation but SHALL NOT bypass privacy, cost, or security policy. A classification request SHALL NOT trigger another classification request.
 
 #### Scenario: Disabled by default
 - **WHEN** configuration leaves self-assessment disabled

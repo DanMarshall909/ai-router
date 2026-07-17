@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: OpenRouter provider client
-The router SHALL provide an OpenRouter client whose API key is read from configuration, environment variables, or user secrets and never stored in source control. Base URL, model mappings, and request timeout SHALL be configurable. The client SHALL support cancellation, translate upstream errors into useful outcomes, and emit structured logs with secrets removed. Application title and referer headers SHALL be optional and configuration-driven. The client SHALL make no outbound call when cloud use is disabled.
+The router SHALL provide an OpenRouter client whose API key is read from configuration or environment variables and never stored in source control. Base URL, model mappings, and request timeout SHALL be configurable. The client SHALL support cancellation, translate upstream errors into useful outcomes, and emit structured logs with secrets removed. Application title and referer headers SHALL be optional and configuration-driven. The client SHALL make no outbound call when cloud use is disabled.
 
 #### Scenario: Cloud call carries configured headers
 - **WHEN** an application title is configured and a cloud request is dispatched
 - **THEN** the request carries the configured title header and the configured base URL is used
 
 #### Scenario: Disabled cloud makes no call
-- **WHEN** `OpenRouter:Enabled` is false and any code path attempts a cloud dispatch
+- **WHEN** `openRouter.enabled` is false and any code path attempts a cloud dispatch
 - **THEN** no outbound HTTP request is made and the caller receives a disabled-provider outcome
 
 #### Scenario: Upstream error translated without leaking the key
@@ -50,7 +50,7 @@ Fallback SHALL be available only while no response bytes have been written to th
 - **THEN** the router does not automatically re-run the request through the cloud
 
 ### Requirement: Local circuit breaker
-The router SHALL open a local-provider circuit breaker after a configurable number of consecutive local failures and close it after a configured cooldown. While open, the router SHALL NOT repeatedly start a crashing local process and SHALL instead use the permitted fallback or return an error.
+The router SHALL open a local-provider circuit breaker after a configurable number of consecutive local failures. While open, the router SHALL NOT repeatedly start a crashing local process and SHALL instead use the permitted fallback or return an error. Recovery from the open state is specified by the `router-self-healing` capability.
 
 #### Scenario: Breaker opens after consecutive failures
 - **WHEN** the configured number of consecutive local failures occurs
@@ -59,10 +59,6 @@ The router SHALL open a local-provider circuit breaker after a configurable numb
 #### Scenario: Open breaker prevents restart storms
 - **WHEN** another local-eligible request arrives during the cooldown
 - **THEN** no local process start is attempted and the request uses the permitted fallback or returns an error
-
-#### Scenario: Breaker closes after cooldown
-- **WHEN** the configured cooldown elapses after the breaker opened
-- **THEN** the breaker closes and the next local-eligible request may attempt a local start
 
 ### Requirement: Bounded timeouts and cancellation propagation
 Every provider call SHALL be bounded by a configured timeout, and client cancellation SHALL propagate into local startup, local inference, and cloud inference so unnecessary work is stopped where supported.
