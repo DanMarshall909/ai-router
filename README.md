@@ -82,7 +82,7 @@ journalctl --user -u ai-router -f
 
 ### GitKraken AI
 
-Configure GitKraken's OpenAI-compatible provider with:
+Configure GitKraken's **Custom URL** provider with:
 
 - Base URL: `http://127.0.0.1:18081/v1`
 - API key: any non-empty placeholder, such as `ai-router`
