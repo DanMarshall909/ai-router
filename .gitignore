@@ -18,3 +18,7 @@ config.local.json
 # OS
 .DS_Store
 Thumbs.db
+
+ai-router
+
+main

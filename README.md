@@ -54,6 +54,40 @@ Config lives at `~/.config/ai-router/config.json`:
 
 Starts on `localhost:<port+1>` (default 18081). The local model launches automatically on first request.
 
+### Update the user service
+
+When AI Router runs as the `ai-router` user service, update it with:
+
+```bash
+./scripts/Update-Router.sh
+```
+
+The script builds a replacement binary from the current checkout, writes or refreshes the user service, enables it, and restarts it. By default it uses `$XDG_CONFIG_HOME/ai-router/config.json` (or `~/.config/ai-router/config.json`); set `AI_ROUTER_CONFIG` to use another configuration path.
+
+To capture request and response traces while diagnosing an issue, use:
+
+```bash
+./scripts/Update-Router.sh --debug-log
+```
+
+This writes trace files to `~/.local/state/ai-router/debug/`. Disable tracing after diagnosis by running the script without `--debug-log`, because traces can contain prompt and response content.
+
+### Tail user-service logs
+
+Follow AI Router's live service logs with:
+
+```bash
+journalctl --user -u ai-router -f
+```
+
+### GitKraken AI
+
+Configure GitKraken's OpenAI-compatible provider with:
+
+- Base URL: `http://127.0.0.1:18081/v1`
+- API key: any non-empty placeholder, such as `ai-router`
+- Model: `auto`
+
 ### 4. Query
 
 ```bash
