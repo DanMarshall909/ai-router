@@ -89,6 +89,7 @@
 - [ ] 10.5 Write failing test then implement: a failing fallback does not cascade into further retries
 - [ ] 10.6 Write failing test then implement: requests including a non-idempotent tool action are not automatically retried
 - [ ] 10.7 Write failing tests then verify `ctx` cancellation propagates through local startup, local inference, and cloud inference
+- [x] 10.8 Write a failing test then treat an empty local completion as a pre-first-chunk failure eligible for cloud fallback
 
 ## 11. Self-healing
 

@@ -190,7 +190,11 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response, start
 
 			choice := chunk.Choices[0]
 			content := choice.Delta.Content
-			if content == "" && len(choice.Delta.ToolCalls) == 0 && choice.FinishReason == "" {
+			if content == "" && len(choice.Delta.ToolCalls) == 0 {
+				if choice.FinishReason != "" && firstChunk {
+					yield(routing.Chunk{}, FailureOutcome{Kind: FailureBeforeFirstChunk, Err: fmt.Errorf("local model returned an empty response")})
+					return
+				}
 				continue
 			}
 

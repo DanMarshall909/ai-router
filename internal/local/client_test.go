@@ -135,6 +135,30 @@ func TestLocalClientMalformedSSE(t *testing.T) {
 	}
 }
 
+func TestLocalClientEmptyCompletionIsPreFirstChunkFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	client := local.NewLocalClient(srv.URL, 5*time.Second)
+	stream, err := client.Stream(context.Background(), routing.ChatRequest{
+		Model:    "test",
+		Messages: []routing.Message{{Role: "user", Content: "hi"}},
+	})
+	require.NoError(t, err, "because the SSE stream opens successfully")
+
+	for _, streamErr := range stream {
+		var outcome local.FailureOutcome
+		require.ErrorAs(t, streamErr, &outcome, "because an empty completion is a failure")
+		require.Equal(t, local.FailureBeforeFirstChunk, outcome.Kind, "because cloud fallback remains available before content is emitted")
+		return
+	}
+	require.Fail(t, "expected an empty completion failure", "because an empty response cannot be returned to the client")
+}
+
 func TestLocalClientFailurePosition(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
