@@ -69,6 +69,27 @@ func setupHandler(t *testing.T, localProvider, cloudProvider routing.ChatProvide
 	return httptest.NewServer(mux)
 }
 
+func TestModelsReturnsAutomaticRoutingModel(t *testing.T) {
+	srv := setupHandler(t, nil, nil)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/models")
+	require.NoError(t, err, "because model discovery must be available without a provider")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode, "because the router must support OpenAI model discovery")
+
+	var result struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result), "because the model list must be JSON")
+	require.Equal(t, "list", result.Object, "because OpenAI model discovery returns a list")
+	require.Len(t, result.Data, 1, "because the router exposes one routing model")
+	require.Equal(t, routing.AutoModelName, result.Data[0].ID, "because clients must select the automatic routing model")
+}
+
 func TestChatCompletionsNonStreaming(t *testing.T) {
 	local := &fakeProvider{chunks: []routing.Chunk{
 		{Content: "Hello"}, {Content: " "}, {Content: "world"},

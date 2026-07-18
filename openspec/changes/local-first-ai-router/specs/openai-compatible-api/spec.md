@@ -5,18 +5,25 @@ The router SHALL expose `POST /v1/chat/completions` accepting an OpenAI-shaped r
 
 #### Scenario: Auto model request returns an OpenAI-shaped response
 - **WHEN** a client posts `{"model":"auto","messages":[{"role":"user","content":"Explain this build error."}],"stream":false}`
-- **THEN** the router selects a provider internally and returns `200 OK` with a body containing `id`, `object`, `created`, `model`, and a `choices` array whose first element has `message.role` and `message.content`
+- **THEN** the router selects a provider internally and returns `200 OK` with a body containing `id`, `object`, `created`, `model`, and a `choices` array whose first element has `index`, `message.role`, and `message.content`
 
 #### Scenario: Response never leaks provider credentials
 - **WHEN** any chat completion succeeds through either the local or cloud provider
 - **THEN** the response body contains no API key, authorization header, or upstream provider secret
+
+### Requirement: OpenAI-compatible model discovery
+The router SHALL expose `GET /v1/models` returning an OpenAI-shaped model list containing the `auto` routing model, so OpenAI-compatible clients can discover a valid model identifier without learning provider-specific models.
+
+#### Scenario: Client discovers the automatic routing model
+- **WHEN** a client requests `GET /v1/models`
+- **THEN** the router returns `200 OK` with an object of `list` and a `data` entry whose ID is `auto`
 
 ### Requirement: Server-Sent Events streaming
 The router SHALL support `stream: true`, responding with `Content-Type: text/event-stream` and emitting OpenAI-compatible `data: {chunk}` events terminated by `data: [DONE]`. Chunks SHALL be flushed as they arrive from the provider rather than buffered to completion. Streaming SHALL work identically whether the local or cloud provider serves the request.
 
 #### Scenario: Streaming response emits incremental chunks
 - **WHEN** a client posts a chat completion with `"stream": true`
-- **THEN** the router responds with `text/event-stream` and emits chunks carrying `choices[0].delta.content`, terminated by `data: [DONE]`
+- **THEN** the router responds with `text/event-stream` and emits chunks containing `id`, `object`, `created`, `model`, and `choices[0].delta.content`, terminated by `data: [DONE]`
 
 #### Scenario: Chunks are flushed, not buffered
 - **WHEN** the provider yields the first token well before generation completes

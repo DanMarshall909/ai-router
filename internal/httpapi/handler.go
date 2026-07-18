@@ -36,9 +36,25 @@ func NewHandler(d *Dispatcher, mgr *local.Manager, localSelfAssessment bool, com
 
 // RegisterRoutes wires the endpoints to the mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/models", h.handleModels)
 	mux.HandleFunc("POST /v1/chat/completions", h.handleChatCompletions)
 	mux.HandleFunc("POST /api/router/local-model/stop", h.handleStopModel)
 	mux.HandleFunc("POST /api/router/local-model/start", h.handleStartModel)
+}
+
+func (h *Handler) handleModels(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"object": "list",
+		"data": []map[string]any{
+			{
+				"id":       routing.AutoModelName,
+				"object":   "model",
+				"created":  0,
+				"owned_by": "ai-router",
+			},
+		},
+	})
 }
 
 // ChatCompletionRequest is the OpenAI-compatible request shape.
