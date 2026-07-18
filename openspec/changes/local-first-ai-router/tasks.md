@@ -118,6 +118,9 @@
 - [ ] 12.7 Implement `POST /api/router/local-model/start` and `/stop` under the administrative authorization policy
 - [ ] 12.8 Write failing test then verify a chat-only caller cannot reach administrative endpoints
 - [x] 12.9 Write failing tests then implement OpenAI-compatible tool-calling passthrough for tool definitions, tool-call deltas, and tool-result messages; the router must not execute client tools
+- [x] 12.10 Write a failing test then implement `GET /v1/models` returning the OpenAI-compatible `auto` routing model for client discovery
+- [x] 12.11 Write failing tests then include `created` and top-level `model` fields in OpenAI-compatible streaming and non-streaming responses
+- [x] 12.12 Include the required `choices[0].index` field in non-streaming OpenAI-compatible responses
 
 ## 13. Security
 
