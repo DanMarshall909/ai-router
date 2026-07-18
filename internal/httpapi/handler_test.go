@@ -107,9 +107,12 @@ func TestChatCompletionsNonStreaming(t *testing.T) {
 	var result map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
 	require.Equal(t, "chat.completion", result["object"])
+	require.NotZero(t, result["created"], "because OpenAI-compatible responses include a creation timestamp")
+	require.NotEmpty(t, result["model"], "because OpenAI-compatible responses include a model identifier")
 
 	choices := result["choices"].([]any)
 	choice := choices[0].(map[string]any)
+	require.Equal(t, float64(0), choice["index"], "because OpenAI-compatible choices include their index")
 	msg := choice["message"].(map[string]any)
 	require.Equal(t, "Hello world", msg["content"])
 	require.Equal(t, "assistant", msg["role"])
@@ -161,6 +164,8 @@ func TestChatCompletionsStreaming(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(payload), &chunk))
 		choices := chunk["choices"].([]any)
 		choice := choices[0].(map[string]any)
+		require.NotZero(t, chunk["created"], "because OpenAI-compatible chunks include a creation timestamp")
+		require.NotEmpty(t, chunk["model"], "because OpenAI-compatible chunks include a model identifier")
 		require.Equal(t, float64(0), choice["index"], "because streamed choices must have an OpenAI-compatible index")
 		if choice["finish_reason"] == "stop" {
 			finished = true

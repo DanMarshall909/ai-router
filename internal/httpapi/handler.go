@@ -141,21 +141,21 @@ func (h *Handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		Reason:   "default routing",
 	}
 	var assessedResponse iter.Seq2[routing.Chunk, error]
-	if req.Model != "auto" && req.Model != "" {
+	if req.Model != routing.AutoModelName && req.Model != "" {
 		decision.Strategy = routing.CloudGeneral
 		decision.Provider = routing.ProviderCloud
 		decision.Model = req.Model
 	} else if req.Complexity != nil && *req.Complexity >= h.complexityThreshold {
 		decision.Strategy = routing.CloudReasoning
 		decision.Provider = routing.ProviderCloud
-		decision.Model = "auto"
+		decision.Model = routing.AutoModelName
 		decision.Reason = "complexity hint meets threshold"
 	} else if h.localSelfAssessment {
 		if strategy, localResponse, assessed := h.dispatcher.Assess(ctx, routingReq); assessed {
 			decision.Strategy = strategy
 			if strategy != routing.QuickLocal {
 				decision.Provider = routing.ProviderCloud
-				decision.Model = "auto"
+				decision.Model = routing.AutoModelName
 			} else if localResponse != nil {
 				assessedResponse = localResponse
 			}
@@ -212,6 +212,7 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 	}
 
 	id := "chatcmpl-poc"
+	created := started.Unix()
 	var provider, model string
 	var content strings.Builder
 	firstChunk := true
@@ -228,6 +229,9 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 		}
 		if model == "" {
 			model = chunk.Model
+		}
+		if model == "" {
+			model = routing.AutoModelName
 		}
 		content.WriteString(chunk.Content)
 		if chunk.FinishReason != "" {
@@ -247,9 +251,11 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 		}
 
 		resp := map[string]any{
-			"id":     id,
-			"object": "chat.completion.chunk",
-			"debug":  map[string]any{"provider": provider, "model": model},
+			"id":      id,
+			"object":  "chat.completion.chunk",
+			"created": created,
+			"model":   model,
+			"debug":   map[string]any{"provider": provider, "model": model},
 			"choices": []map[string]any{
 				{
 					"index": 0,
@@ -263,8 +269,10 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 	}
 
 	completed := map[string]any{
-		"id":     id,
-		"object": "chat.completion.chunk",
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": created,
+		"model":   model,
 		"choices": []map[string]any{
 			{
 				"index":         0,
@@ -312,13 +320,18 @@ func (h *Handler) writeNonStreamingResponse(w http.ResponseWriter, stream iter.S
 	if len(toolCalls) > 0 {
 		message["tool_calls"] = orderedToolCalls(toolCalls)
 	}
+	if model == "" {
+		model = routing.AutoModelName
+	}
 
 	resp := map[string]any{
-		"id":     "chatcmpl-poc",
-		"object": "chat.completion",
-		"debug":  map[string]any{"provider": provider, "model": model},
+		"id":      "chatcmpl-poc",
+		"object":  "chat.completion",
+		"created": started.Unix(),
+		"debug":   map[string]any{"provider": provider, "model": model},
 		"choices": []map[string]any{
 			{
+				"index":         0,
 				"message":       message,
 				"finish_reason": finishReason,
 			},
