@@ -153,6 +153,8 @@
 - [ ] 15.7 Write failing tests then verify status contains no secrets and degrades to unknown when GPU availability cannot be detected
 - [ ] 15.8 Write failing test then implement `nvidia-smi` detection with a fixed argument list behind a swappable interface, cached with a short TTL so repeated status polls spawn at most one process per window
 - [ ] 15.9 Write failing test then verify routing decisions are unaffected by GPU availability, because the field is diagnostic only
+- [x] 15.10 Embed and log the UTC build timestamp during update-script builds
+- [x] 15.11 Add an opt-in `--debug-log` update-script option for request and response tracing
 
 ## 16. Integration tests
 

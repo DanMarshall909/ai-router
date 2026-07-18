@@ -16,6 +16,8 @@ import (
 	"github.com/lmittmann/tint"
 )
 
+var buildTime = "development"
+
 func main() {
 	configPath := flag.String("config", defaultConfigPath(), "path to config.json")
 	debugLog := flag.Bool("debug-log", false, "save request and response traces to disk")
@@ -94,6 +96,7 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", cfg.LocalModel.Host, cfg.LocalModel.Port+1)
 	slog.Info("ai-router starting",
 		"addr", addr,
+		"build_time", buildTime,
 		"idle_timeout", cfg.LocalModel.IdleTimeout.String(),
 	)
 	fmt.Fprintf(os.Stderr, "ai-router listening on http://%s\n", addr)
