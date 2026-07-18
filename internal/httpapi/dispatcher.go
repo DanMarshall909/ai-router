@@ -55,7 +55,7 @@ func (d *Dispatcher) Assess(ctx context.Context, req routing.ChatRequest) (routi
 	started := time.Now()
 	slog.Info("local self-assessment started", "messages", len(req.Messages))
 	assessment := routing.ChatRequest{
-		Model:    "auto",
+		Model:    routing.AutoModelName,
 		Messages: append([]routing.Message{{Role: "system", Content: localAssessmentInstruction}}, req.Messages...),
 	}
 	d.manager.RequestBegin()

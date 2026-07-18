@@ -1,6 +1,7 @@
 package routing
 
 const (
+	AutoModelName = "auto"
 	RoleSystem    = "system"
 	RoleUser      = "user"
 	RoleAssistant = "assistant"

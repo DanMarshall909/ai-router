@@ -73,7 +73,7 @@ func WithAllowedModels(patterns []string) OpenRouterOption {
 // Stream implements routing.ChatProvider.
 func (c *OpenRouterClient) Stream(ctx context.Context, req routing.ChatRequest) (iter.Seq2[routing.Chunk, error], error) {
 	model := req.Model
-	if model == "auto" && c.autoModel != "" {
+	if model == routing.AutoModelName && c.autoModel != "" {
 		model = c.autoModel
 	}
 	if mapped, ok := c.modelMap[model]; ok {
