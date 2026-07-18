@@ -34,7 +34,7 @@ Concurrent local-eligible requests arriving while the model is stopped or starti
 ### Requirement: Lifecycle state is tracked and exposed
 The manager SHALL track and expose local model state as one of `Stopped`, `Starting`, `Ready`, `Stopping`, `Faulted`, together with the process ID while running. State transitions SHALL be safe under concurrency, and locks SHALL NOT be held while awaiting network or process operations.
 
-Busyness SHALL NOT be a lifecycle state. `llama-server` serves concurrent requests, and the active-request count is already tracked for the idle guard, so busyness SHALL be exposed as a derived property (`IsBusy` ⇔ active request count > 0) over that single source of truth.
+Busyness SHALL NOT be a lifecycle state. The router SHALL expose its active-request count as a derived property, and SHALL query `llama-server` slot state before idle unloading so direct clients are not interrupted.
 
 #### Scenario: Busyness is derived, not stored
 - **WHEN** a local request is in flight
@@ -43,6 +43,10 @@ Busyness SHALL NOT be a lifecycle state. `llama-server` serves concurrent reques
 #### Scenario: Concurrent requests do not change lifecycle state
 - **WHEN** several local requests are in flight simultaneously
 - **THEN** the lifecycle state remains `Ready` throughout and the active-request count reflects the number in flight
+
+#### Scenario: Ready transition resets idle activity
+- **WHEN** a newly started or adopted local server becomes ready
+- **THEN** its last activity is reset to the readiness time, preventing a stale timestamp from immediately unloading it
 
 #### Scenario: State follows a successful start
 - **WHEN** a start begins and completes successfully
@@ -85,6 +89,10 @@ A hosted background service SHALL stop the local model when it is running, no lo
 - **WHEN** a local request begins before the idle timeout elapses
 - **THEN** the unload is deferred and the timeout is measured from the new last-activity timestamp
 
+#### Scenario: Direct model activity protects the model
+- **WHEN** `llama-server` reports an active slot while the router has no tracked local request
+- **THEN** the idle timer is refreshed and the model remains running
+
 #### Scenario: No unload during a transition
 - **WHEN** the idle timeout elapses while the model is `Starting` or `Stopping`
 - **THEN** the idle service takes no action, because a lifecycle transition is already in progress
@@ -103,3 +111,10 @@ The local OpenAI-compatible client SHALL send chat-completion requests to `llama
 #### Scenario: Failure position is reported
 - **WHEN** the local server fails after emitting some chunks
 - **THEN** the reported outcome records that generation had already begun, distinguishing it from a failure before the first chunk
+
+### Requirement: Local model reasoning stream preservation
+The local client SHALL preserve `reasoning_content` deltas from `llama-server` as response chunks. Reasoning output SHALL count as generated output for failure classification.
+
+#### Scenario: Reasoning is the first local output
+- **WHEN** the local server emits a `reasoning_content` delta before any final content
+- **THEN** the router treats it as the first generated chunk rather than falling back to cloud

@@ -21,6 +21,7 @@ type ChatRequest struct {
 	Tools             json.RawMessage
 	ToolChoice        json.RawMessage
 	ParallelToolCalls *bool
+	EnableThinking    *bool
 	Stream            bool
 	SessionID         string
 	Fallbacks         []string
@@ -37,6 +38,7 @@ type Message struct {
 // Chunk is a single streaming response chunk.
 type Chunk struct {
 	Content      string
+	Reasoning    string
 	ToolCalls    json.RawMessage
 	FinishReason string
 	Provider     string

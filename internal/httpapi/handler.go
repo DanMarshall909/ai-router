@@ -137,7 +137,7 @@ func (h *Handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	decision := routing.RoutingDecision{
 		Strategy: routing.QuickLocal,
 		Provider: routing.ProviderLocal,
-		Model:    localModelName,
+		Model:    h.dispatcher.LocalModelName(),
 		Reason:   "default routing",
 	}
 	var assessedResponse iter.Seq2[routing.Chunk, error]
@@ -215,6 +215,7 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 	created := started.Unix()
 	var provider, model string
 	var content strings.Builder
+	var reasoning strings.Builder
 	firstChunk := true
 	finishReason := "stop"
 	for chunk, err := range stream {
@@ -234,6 +235,7 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 			model = routing.AutoModelName
 		}
 		content.WriteString(chunk.Content)
+		reasoning.WriteString(chunk.Reasoning)
 		if chunk.FinishReason != "" {
 			finishReason = chunk.FinishReason
 		}
@@ -241,6 +243,9 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 		delta := make(map[string]any)
 		if chunk.Content != "" {
 			delta["content"] = chunk.Content
+		}
+		if chunk.Reasoning != "" {
+			delta["reasoning_content"] = chunk.Reasoning
 		}
 		if len(chunk.ToolCalls) > 0 {
 			delta["tool_calls"] = chunk.ToolCalls
@@ -292,6 +297,7 @@ func (h *Handler) writeStreamingResponse(w http.ResponseWriter, stream iter.Seq2
 
 func (h *Handler) writeNonStreamingResponse(w http.ResponseWriter, stream iter.Seq2[routing.Chunk, error], started time.Time) (string, error) {
 	var content strings.Builder
+	var reasoning strings.Builder
 	var provider, model string
 	toolCalls := make(map[int]toolCall)
 	finishReason := "stop"
@@ -307,6 +313,7 @@ func (h *Handler) writeNonStreamingResponse(w http.ResponseWriter, stream iter.S
 			model = chunk.Model
 		}
 		content.WriteString(chunk.Content)
+		reasoning.WriteString(chunk.Reasoning)
 		if chunk.FinishReason != "" {
 			finishReason = chunk.FinishReason
 		}
@@ -317,6 +324,9 @@ func (h *Handler) writeNonStreamingResponse(w http.ResponseWriter, stream iter.S
 	}
 
 	message := map[string]any{"role": "assistant", "content": content.String()}
+	if reasoning.Len() > 0 {
+		message["reasoning_content"] = reasoning.String()
+	}
 	if len(toolCalls) > 0 {
 		message["tool_calls"] = orderedToolCalls(toolCalls)
 	}

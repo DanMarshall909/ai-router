@@ -60,6 +60,22 @@ func TestStartPassesArgumentsAsSeparateEntries(t *testing.T) {
 	require.Equal(t, 1, fac.StartCount(), "because one process should be started")
 }
 
+func TestStartAdoptsHealthyExistingServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/health", r.URL.Path, "because adoption requires the configured health endpoint")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+	}))
+	defer srv.Close()
+
+	fac := local.NewFakeProcessFactory()
+	mgr := local.NewManager(testConfigFromServer(srv), fac)
+
+	require.NoError(t, mgr.Start(context.Background()), "because a healthy existing server can be adopted")
+	require.Equal(t, routing.StateReady, mgr.State(), "because an adopted server is immediately usable")
+	require.Equal(t, 0, fac.StartCount(), "because adoption must not start a competing process")
+}
+
 func TestStartHandlesPathsWithSpaces(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -218,6 +234,7 @@ func TestStateTransitionsOnSuccessfulStart(t *testing.T) {
 	require.NoError(t, mgr.Start(context.Background()))
 	require.Equal(t, routing.StateReady, mgr.State(), "because state should be Ready after start")
 	require.NotZero(t, mgr.Pid(), "because PID should be set when ready")
+	require.WithinDuration(t, time.Now(), mgr.LastActivity(), time.Second, "because a newly ready model must not inherit stale idle activity")
 }
 
 func TestStateIsFaultedOnReadinessTimeout(t *testing.T) {

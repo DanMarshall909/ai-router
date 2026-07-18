@@ -14,25 +14,32 @@ import (
 
 // Dispatcher routes requests to providers with single controlled fallback.
 type Dispatcher struct {
-	local   routing.ChatProvider
-	cloud   routing.ChatProvider
-	manager *local.Manager
+	local          routing.ChatProvider
+	cloud          routing.ChatProvider
+	manager        *local.Manager
+	localModelName string
 }
 
 const (
 	localAssessmentInstruction    = "Answer simple requests. For complex coding reply exactly <CLOUD_CODING>. For complex reasoning reply exactly <CLOUD_REASONING>."
 	localAssessmentCodingLabel    = "<CLOUD_CODING>"
 	localAssessmentReasoningLabel = "<CLOUD_REASONING>"
-	localModelName                = "bonsai"
+	localAssessmentTimeout        = 30 * time.Second
 )
 
 // NewDispatcher creates a dispatcher with local and cloud providers.
-func NewDispatcher(localProvider, cloudProvider routing.ChatProvider, mgr *local.Manager) *Dispatcher {
+func NewDispatcher(localProvider, cloudProvider routing.ChatProvider, mgr *local.Manager, localModelName string) *Dispatcher {
 	return &Dispatcher{
-		local:   localProvider,
-		cloud:   cloudProvider,
-		manager: mgr,
+		local:          localProvider,
+		cloud:          cloudProvider,
+		manager:        mgr,
+		localModelName: localModelName,
 	}
+}
+
+// LocalModelName returns the configured local model identifier.
+func (d *Dispatcher) LocalModelName() string {
+	return d.localModelName
 }
 
 // Assess uses the ready local model to choose a strategy for an automatic request.
@@ -55,12 +62,14 @@ func (d *Dispatcher) Assess(ctx context.Context, req routing.ChatRequest) (routi
 	started := time.Now()
 	slog.Info("local self-assessment started", "messages", len(req.Messages))
 	assessment := routing.ChatRequest{
-		Model:    routing.AutoModelName,
+		Model:    d.localModelName,
 		Messages: append([]routing.Message{{Role: "system", Content: localAssessmentInstruction}}, req.Messages...),
 	}
+	assessmentCtx, cancel := context.WithTimeout(ctx, localAssessmentTimeout)
+	defer cancel()
 	d.manager.RequestBegin()
 	defer d.manager.RequestEnd()
-	stream, err := d.local.Stream(ctx, assessment)
+	stream, err := d.local.Stream(assessmentCtx, assessment)
 	if err != nil {
 		slog.Warn("local self-assessment failed", "err", err, "duration", time.Since(started))
 		return routing.CloudReasoning, nil, true
@@ -86,7 +95,7 @@ func (d *Dispatcher) Assess(ctx context.Context, req routing.ChatRequest) (routi
 		return routing.CloudReasoning, nil, true
 	case response != "":
 		slog.Info("local self-assessment complete", "strategy", routing.QuickLocal, "duration", time.Since(started), "answer_reused", true)
-		return routing.QuickLocal, singleChunk(routing.Chunk{Content: response, Provider: routing.ProviderLocal, Model: localModelName}), true
+		return routing.QuickLocal, singleChunk(routing.Chunk{Content: response, Provider: routing.ProviderLocal, Model: d.localModelName}), true
 	default:
 		slog.Warn("local self-assessment returned an empty response", "duration", time.Since(started))
 		return routing.CloudReasoning, nil, true
@@ -113,6 +122,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req routing.ChatRequest, deci
 	)
 
 	if isLocal && d.local != nil {
+		localReq := req
+		if !req.Stream {
+			disableThinking := false
+			localReq.EnableThinking = &disableThinking
+		}
 		// Check model state for instant cloud fallback
 		if d.manager != nil {
 			state := d.manager.State()
@@ -149,7 +163,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req routing.ChatRequest, deci
 		}
 
 		decision.ActualProvider = routing.ProviderLocal
-		stream, err := d.local.Stream(ctx, req)
+		stream, err := d.local.Stream(ctx, localReq)
 		if err != nil {
 			slog.Warn("local provider failed", "err", err)
 			if d.cloud != nil && d.isPreFirstChunkError(err) {

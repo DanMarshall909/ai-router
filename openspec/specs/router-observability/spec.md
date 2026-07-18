@@ -16,6 +16,20 @@ The router SHALL emit structured logs carrying request correlation ID, chosen st
 - **WHEN** the local model starts, exits unexpectedly, or is unloaded for idleness
 - **THEN** a structured log entry records the event and its duration or reason
 
+### Requirement: Build timestamp logged at startup
+The router SHALL log the UTC build timestamp at startup. The update script SHALL embed that timestamp in the built binary so an operator can identify the deployed build from the service journal.
+
+#### Scenario: Updated router identifies its build
+- **WHEN** the update script rebuilds and restarts the router
+- **THEN** the startup log contains the UTC timestamp at which the binary was built
+
+### Requirement: Opt-in request tracing from the update script
+The update script SHALL accept a `--debug-log` option that starts the router with request and response tracing enabled. The option SHALL be opt-in because debug traces may contain prompt and response content.
+
+#### Scenario: Operator enables request tracing
+- **WHEN** the update script runs with `--debug-log`
+- **THEN** the generated user service starts the router with `-debug-log` and traces are written to the configured debug directory
+
 ### Requirement: Sensitive data is never logged
 Logs SHALL NOT contain API keys, authorization headers, complete email or personal-service content, full prompts by default, or command output that may contain secrets.
 

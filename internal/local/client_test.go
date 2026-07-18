@@ -19,6 +19,14 @@ func TestLocalClientSuccessfulStream(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/v1/chat/completions", r.URL.Path, "because request should go to the chat completions endpoint")
 		require.Equal(t, http.MethodPost, r.Method)
+		var request struct {
+			ChatTemplateKwargs struct {
+				EnableThinking *bool `json:"enable_thinking"`
+			} `json:"chat_template_kwargs"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request), "because the request body must be valid JSON")
+		require.NotNil(t, request.ChatTemplateKwargs.EnableThinking, "because the local request must include its thinking setting")
+		require.False(t, *request.ChatTemplateKwargs.EnableThinking, "because non-streaming callers should receive final content without hidden reasoning")
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
@@ -41,8 +49,10 @@ func TestLocalClientSuccessfulStream(t *testing.T) {
 	defer srv.Close()
 
 	client := local.NewLocalClient(srv.URL, 5*time.Second)
+	disableThinking := false
 	req := routing.ChatRequest{
-		Model: "test",
+		Model:          "test",
+		EnableThinking: &disableThinking,
 		Messages: []routing.Message{
 			{Role: "user", Content: "hi"},
 		},
@@ -58,6 +68,26 @@ func TestLocalClientSuccessfulStream(t *testing.T) {
 	}
 
 	require.Equal(t, "Hello world", strings.Join(collected, ""), "because all chunks should be collected")
+}
+
+func TestLocalClientStreamsReasoningContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"thinking\"}}]}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	client := local.NewLocalClient(srv.URL, 5*time.Second)
+	stream, err := client.Stream(context.Background(), routing.ChatRequest{Model: "test", Messages: []routing.Message{{Role: "user", Content: "hi"}}})
+	require.NoError(t, err, "because the SSE stream opens successfully")
+
+	for chunk, streamErr := range stream {
+		require.NoError(t, streamErr, "because reasoning is a valid model response")
+		require.Equal(t, "thinking", chunk.Reasoning, "because reasoning content must reach the router")
+		return
+	}
+	require.Fail(t, "expected a reasoning chunk", "because reasoning must not be treated as an empty response")
 }
 
 func TestLocalClientConnectionFailure(t *testing.T) {

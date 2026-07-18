@@ -34,6 +34,10 @@ Fallback SHALL be available only while no response bytes have been written to th
 - **WHEN** local inference fails during startup or before yielding its first chunk of a streaming request
 - **THEN** the router falls back to the mapped cloud strategy and the client receives a complete event-stream with no partial local content
 
+#### Scenario: Empty local completion falls back normally
+- **WHEN** the local provider ends a completion before yielding content, reasoning content, or a tool call
+- **THEN** the router treats it as a pre-first-chunk failure and falls back to cloud
+
 #### Scenario: Streaming failure after the first chunk terminates the stream
 - **WHEN** the local provider fails mid-generation after chunks have already been flushed to the client
 - **THEN** the router does not re-dispatch to the cloud, terminates the stream, and records the failure, because the response is already committed

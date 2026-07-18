@@ -23,18 +23,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testLocalModelName = "test-local"
+
 type fakeProvider struct {
 	chunks []routing.Chunk
 	err    error
 	mu     sync.Mutex
 	calls  int
 	req    routing.ChatRequest
+	ctx    context.Context
 }
 
 func (f *fakeProvider) Stream(ctx context.Context, req routing.ChatRequest) (iter.Seq2[routing.Chunk, error], error) {
 	f.mu.Lock()
 	f.calls++
 	f.req = req
+	f.ctx = ctx
 	f.mu.Unlock()
 	if f.err != nil {
 		return nil, f.err
@@ -54,6 +58,12 @@ func (f *fakeProvider) Request() routing.ChatRequest {
 	return f.req
 }
 
+func (f *fakeProvider) Context() context.Context {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ctx
+}
+
 func (f *fakeProvider) CallCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -62,7 +72,7 @@ func (f *fakeProvider) CallCount() int {
 
 func setupHandler(t *testing.T, localProvider, cloudProvider routing.ChatProvider) *httptest.Server {
 	t.Helper()
-	d := httpapi.NewDispatcher(localProvider, cloudProvider, nil)
+	d := httpapi.NewDispatcher(localProvider, cloudProvider, nil, testLocalModelName)
 	h := httpapi.NewHandler(d, nil, config.DefaultRoutingEnableLocalSelfAssessment, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -361,7 +371,7 @@ func TestColdStartRoutesToCloud(t *testing.T) {
 	local := &fakeProvider{chunks: []routing.Chunk{{Content: "local response"}}}
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
 
-	d := httpapi.NewDispatcher(local, cloud, mgr)
+	d := httpapi.NewDispatcher(local, cloud, mgr, testLocalModelName)
 	h := httpapi.NewHandler(d, mgr, config.DefaultRoutingEnableLocalSelfAssessment, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -392,7 +402,7 @@ func TestSubsequentRequestUsesLocalAfterReady(t *testing.T) {
 	local := &fakeProvider{chunks: []routing.Chunk{{Content: "local response"}}}
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
 
-	d := httpapi.NewDispatcher(local, cloud, mgr)
+	d := httpapi.NewDispatcher(local, cloud, mgr, testLocalModelName)
 	h := httpapi.NewHandler(d, mgr, config.DefaultRoutingEnableLocalSelfAssessment, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -430,7 +440,7 @@ func TestMultipleColdStartRequestsCoalesce(t *testing.T) {
 	local := &fakeProvider{chunks: []routing.Chunk{{Content: "local"}}}
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud"}}}
 
-	d := httpapi.NewDispatcher(local, cloud, mgr)
+	d := httpapi.NewDispatcher(local, cloud, mgr, testLocalModelName)
 
 	// Send multiple concurrent requests
 	var results []string
@@ -478,7 +488,7 @@ func TestLocalSelfAssessmentSelectsCloudCoding(t *testing.T) {
 	require.NoError(t, mgr.Start(context.Background()), "because the local assessor requires a ready model")
 
 	local := &fakeProvider{chunks: []routing.Chunk{{Content: "<CLOUD_CODING>"}}}
-	d := httpapi.NewDispatcher(local, nil, mgr)
+	d := httpapi.NewDispatcher(local, nil, mgr, testLocalModelName)
 	strategy, response, assessed := d.Assess(context.Background(), routing.ChatRequest{
 		Model:    "auto",
 		Messages: []routing.Message{{Role: "user", Content: "Implement a scheduler"}},
@@ -487,10 +497,29 @@ func TestLocalSelfAssessmentSelectsCloudCoding(t *testing.T) {
 	require.True(t, assessed, "because the ready local model returned a valid assessment")
 	require.Equal(t, routing.CloudCoding, strategy, "because the local model selected CLOUD_CODING")
 	require.Nil(t, response, "because cloud routing should not include a local response")
+	require.Equal(t, testLocalModelName, local.Request().Model, "because the local server must receive its configured model identifier rather than the router's auto alias")
+}
+
+func TestLocalSelfAssessmentUsesBoundedContext(t *testing.T) {
+	mgr, healthSrv := testManager(t)
+	defer healthSrv.Close()
+	require.NoError(t, mgr.Start(context.Background()), "because the local assessor requires a ready model")
+
+	local := &fakeProvider{chunks: []routing.Chunk{{Content: "local response"}}}
+	d := httpapi.NewDispatcher(local, nil, mgr, testLocalModelName)
+	requestCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	d.Assess(requestCtx, routing.ChatRequest{Messages: []routing.Message{{Role: "user", Content: "Hello"}}})
+
+	assessmentDeadline, ok := local.Context().Deadline()
+	require.True(t, ok, "because self-assessment must have its own deadline")
+	requestDeadline, ok := requestCtx.Deadline()
+	require.True(t, ok, "because the caller context has a deadline")
+	require.True(t, assessmentDeadline.Before(requestDeadline), "because cloud fallback needs time remaining in the caller context")
 }
 
 func TestLocalSelfAssessmentSkipsWhenModelUnavailable(t *testing.T) {
-	d := httpapi.NewDispatcher(&fakeProvider{}, nil, nil)
+	d := httpapi.NewDispatcher(&fakeProvider{}, nil, nil, testLocalModelName)
 	strategy, response, assessed := d.Assess(context.Background(), routing.ChatRequest{
 		Model:    "auto",
 		Messages: []routing.Message{{Role: "user", Content: "Hello"}},
@@ -507,7 +536,7 @@ func TestLocalSelfAssessmentReturnsAnswerWithoutSecondInference(t *testing.T) {
 	require.NoError(t, mgr.Start(context.Background()), "because the local assessor requires a ready model")
 
 	local := &fakeProvider{chunks: []routing.Chunk{{Content: "The answer is 4."}}}
-	d := httpapi.NewDispatcher(local, nil, mgr)
+	d := httpapi.NewDispatcher(local, nil, mgr, testLocalModelName)
 	strategy, response, assessed := d.Assess(context.Background(), routing.ChatRequest{
 		Model:    "auto",
 		Messages: []routing.Message{{Role: "user", Content: "What is 2 + 2?"}},
@@ -527,7 +556,7 @@ func TestLocalSelfAssessmentEscalatesEmptyResponseToCloud(t *testing.T) {
 	defer healthSrv.Close()
 	require.NoError(t, mgr.Start(context.Background()), "because the local assessor requires a ready model")
 
-	d := httpapi.NewDispatcher(&fakeProvider{}, nil, mgr)
+	d := httpapi.NewDispatcher(&fakeProvider{}, nil, mgr, testLocalModelName)
 	strategy, response, assessed := d.Assess(context.Background(), routing.ChatRequest{
 		Model:    "auto",
 		Messages: []routing.Message{{Role: "user", Content: "Design a scheduler"}},
@@ -545,7 +574,7 @@ func TestEmptyAssessmentRoutesOriginalRequestToCloud(t *testing.T) {
 
 	local := &fakeProvider{}
 	cloud := &fakeProvider{chunks: []routing.Chunk{{Content: "cloud response"}}}
-	d := httpapi.NewDispatcher(local, cloud, mgr)
+	d := httpapi.NewDispatcher(local, cloud, mgr, testLocalModelName)
 	h := httpapi.NewHandler(d, mgr, true, config.DefaultRoutingComplexityThreshold, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

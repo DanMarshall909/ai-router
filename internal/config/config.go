@@ -302,6 +302,9 @@ func Validate(cfg Config) error {
 		if !ok {
 			return fmt.Errorf("validation failed: %s has no mapping for strategy %q", KeyModelRoutingStrategies, strategy)
 		}
+		if mapping.Model == "" {
+			return fmt.Errorf("validation failed: %s maps strategy %q to an empty model", KeyModelRoutingStrategies, strategy)
+		}
 		if isPlaceholder(mapping.Model) {
 			return fmt.Errorf("validation failed: %s maps strategy %q to placeholder model %q; replace it with a model identifier for the configured cloud provider", KeyModelRoutingStrategies, strategy, mapping.Model)
 		}

@@ -84,7 +84,8 @@ func main() {
 	}
 
 	// Wire dispatcher and handler
-	d := httpapi.NewDispatcher(localClient, cloudClient, mgr)
+	localModel := cfg.ModelRouting.Strategies[string(routing.QuickLocal)].Model
+	d := httpapi.NewDispatcher(localClient, cloudClient, mgr, localModel)
 	h := httpapi.NewHandler(d, mgr, cfg.Routing.EnableLocalSelfAssessment, cfg.Routing.ComplexityThreshold, httpapi.NewTraceLogger(defaultDebugLogDirectory(), *debugLog))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

@@ -101,26 +101,36 @@ func (c *LocalClient) buildRequestBody(req routing.ChatRequest) (io.Reader, erro
 		ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
 	}
 	type request struct {
-		Model             string          `json:"model"`
-		Messages          []message       `json:"messages"`
-		Tools             json.RawMessage `json:"tools,omitempty"`
-		ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
-		ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
-		Stream            bool            `json:"stream"`
+		Model              string          `json:"model"`
+		Messages           []message       `json:"messages"`
+		Tools              json.RawMessage `json:"tools,omitempty"`
+		ToolChoice         json.RawMessage `json:"tool_choice,omitempty"`
+		ParallelToolCalls  *bool           `json:"parallel_tool_calls,omitempty"`
+		ChatTemplateKwargs json.RawMessage `json:"chat_template_kwargs,omitempty"`
+		Stream             bool            `json:"stream"`
 	}
 
 	msgs := make([]message, len(req.Messages))
 	for i, m := range req.Messages {
 		msgs[i] = message{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID, ToolCalls: m.ToolCalls}
 	}
+	var chatTemplateKwargs json.RawMessage
+	if req.EnableThinking != nil {
+		kwargs, marshalErr := json.Marshal(map[string]bool{"enable_thinking": *req.EnableThinking})
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		chatTemplateKwargs = kwargs
+	}
 
 	r := request{
-		Model:             req.Model,
-		Messages:          msgs,
-		Tools:             req.Tools,
-		ToolChoice:        req.ToolChoice,
-		ParallelToolCalls: req.ParallelToolCalls,
-		Stream:            true,
+		Model:              req.Model,
+		Messages:           msgs,
+		Tools:              req.Tools,
+		ToolChoice:         req.ToolChoice,
+		ParallelToolCalls:  req.ParallelToolCalls,
+		ChatTemplateKwargs: chatTemplateKwargs,
+		Stream:             true,
 	}
 
 	data, err := json.Marshal(r)
@@ -170,6 +180,7 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response, start
 				Choices []struct {
 					Delta struct {
 						Content   string          `json:"content"`
+						Reasoning string          `json:"reasoning_content"`
 						ToolCalls json.RawMessage `json:"tool_calls"`
 					} `json:"delta"`
 					FinishReason string `json:"finish_reason"`
@@ -190,7 +201,8 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response, start
 
 			choice := chunk.Choices[0]
 			content := choice.Delta.Content
-			if content == "" && len(choice.Delta.ToolCalls) == 0 {
+			reasoning := choice.Delta.Reasoning
+			if content == "" && reasoning == "" && len(choice.Delta.ToolCalls) == 0 {
 				if choice.FinishReason != "" && firstChunk {
 					yield(routing.Chunk{}, FailureOutcome{Kind: FailureBeforeFirstChunk, Err: fmt.Errorf("local model returned an empty response")})
 					return
@@ -203,8 +215,8 @@ func (c *LocalClient) readStream(ctx context.Context, resp *http.Response, start
 				slog.Info("local response started", "first_token_duration", firstChunkAt.Sub(started), "input_characters", inputCharacters)
 			}
 			firstChunk = false
-			outputCharacters += len(content)
-			if !yield(routing.Chunk{Content: content, ToolCalls: choice.Delta.ToolCalls, FinishReason: choice.FinishReason, Provider: "local", Model: chunk.Model}, nil) {
+			outputCharacters += len(content) + len(reasoning)
+			if !yield(routing.Chunk{Content: content, Reasoning: reasoning, ToolCalls: choice.Delta.ToolCalls, FinishReason: choice.FinishReason, Provider: "local", Model: chunk.Model}, nil) {
 				return
 			}
 		}

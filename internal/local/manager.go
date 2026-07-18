@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,11 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+const (
+	localModelHealthPath = "/health"
+	localModelSlotsPath  = "/slots"
+)
+
 // Manager supervises the lifecycle of a llama-server process.
 type Manager struct {
 	mu    sync.Mutex
@@ -24,6 +30,7 @@ type Manager struct {
 	procFac    ProcessFactory
 	cfg        config.LocalModelConfig
 	healthURL  string
+	slotsURL   string
 	httpClient *http.Client
 
 	activeRequests atomic.Int32
@@ -44,7 +51,8 @@ func NewManager(cfg config.LocalModelConfig, fac ProcessFactory) *Manager {
 		state:      routing.StateStopped,
 		procFac:    fac,
 		cfg:        cfg,
-		healthURL:  fmt.Sprintf("http://%s:%d/health", cfg.Host, cfg.Port),
+		healthURL:  fmt.Sprintf("http://%s:%d%s", cfg.Host, cfg.Port, localModelHealthPath),
+		slotsURL:   fmt.Sprintf("http://%s:%d%s", cfg.Host, cfg.Port, localModelSlotsPath),
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 		exitCh:     make(chan ExitStatus, 1),
 		idleStopCh: make(chan struct{}),
@@ -136,6 +144,13 @@ func (m *Manager) StartInBackground(ctx context.Context) {
 }
 
 func (m *Manager) doStart(ctx context.Context) (any, error) {
+	if m.checkAdoptableHealth() {
+		m.UpdateActivity()
+		m.setState(routing.StateReady)
+		slog.Info("adopted existing local model", "host", m.cfg.Host, "port", m.cfg.Port)
+		return nil, nil
+	}
+
 	slog.Info("starting local model", "executable", m.cfg.ExecutablePath, "model", m.cfg.ModelPath)
 	m.setState(routing.StateStarting)
 
@@ -174,6 +189,7 @@ func (m *Manager) doStart(ctx context.Context) (any, error) {
 	}
 
 	slog.Info("local model ready", "pid", m.pid)
+	m.UpdateActivity()
 	m.setState(routing.StateReady)
 	return nil, nil
 }
@@ -214,6 +230,46 @@ func (m *Manager) checkHealth() bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+func (m *Manager) checkAdoptableHealth() bool {
+	resp, err := m.httpClient.Get(m.healthURL)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var health struct {
+		Status string `json:"status"`
+	}
+	return json.NewDecoder(resp.Body).Decode(&health) == nil && health.Status == "ok"
+}
+
+func (m *Manager) modelIsProcessing() bool {
+	resp, err := m.httpClient.Get(m.slotsURL)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var slots []struct {
+		IsProcessing bool `json:"is_processing"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&slots); err != nil {
+		return false
+	}
+	for _, slot := range slots {
+		if slot.IsProcessing {
+			return true
+		}
+	}
+	return false
 }
 
 // watchExit reads from proc.Wait() exactly once and sends to m.exitCh.
@@ -339,6 +395,10 @@ func (m *Manager) checkIdle() {
 		return
 	}
 	if m.IsBusy() {
+		return
+	}
+	if m.modelIsProcessing() {
+		m.UpdateActivity()
 		return
 	}
 

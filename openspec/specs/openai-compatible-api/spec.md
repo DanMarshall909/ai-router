@@ -16,12 +16,23 @@ The router SHALL expose `POST /v1/chat/completions` accepting an OpenAI-shaped r
 - **WHEN** any chat completion succeeds through either the local or cloud provider
 - **THEN** the response body contains no API key, authorization header, or upstream provider secret
 
+### Requirement: OpenAI-compatible model discovery
+The router SHALL expose `GET /v1/models` returning an OpenAI-shaped model list containing the `auto` routing model, so OpenAI-compatible clients can discover a valid model identifier without learning provider-specific models.
+
+#### Scenario: Client discovers the automatic routing model
+- **WHEN** a client requests `GET /v1/models`
+- **THEN** the router returns `200 OK` with an object of `list` and a `data` entry whose ID is `auto`
+
 ### Requirement: Server-Sent Events streaming
 The router SHALL support `stream: true`, responding with `Content-Type: text/event-stream` and emitting OpenAI-compatible `data: {chunk}` events terminated by `data: [DONE]`. Chunks SHALL be flushed as they arrive from the provider rather than buffered to completion. Streaming SHALL work identically whether the local or cloud provider serves the request.
 
 #### Scenario: Streaming response emits incremental chunks
 - **WHEN** a client posts a chat completion with `"stream": true`
-- **THEN** the router responds with `text/event-stream` and emits chunks carrying `choices[0].delta.content`, terminated by `data: [DONE]`
+- **THEN** the router responds with `text/event-stream` and emits chunks carrying `choices[0].delta.content` or `choices[0].delta.reasoning_content`, terminated by `data: [DONE]`
+
+#### Scenario: Streaming reasoning reaches the client
+- **WHEN** a local provider emits `reasoning_content` before final content
+- **THEN** the router forwards it in `choices[0].delta.reasoning_content` without waiting for final content
 
 #### Scenario: Chunks are flushed, not buffered
 - **WHEN** the provider yields the first token well before generation completes
@@ -41,6 +52,25 @@ Non-streaming requests SHALL be served by aggregating the provider's streamed ch
 #### Scenario: Non-streaming request returns a single aggregated body
 - **WHEN** a client posts a chat completion with `"stream": false`
 - **THEN** the router returns a single JSON chat-completion response whose content equals the concatenation of the chunks the provider produced
+
+#### Scenario: Non-streaming local request avoids hidden reasoning
+- **WHEN** a local request is non-streaming
+- **THEN** the router passes `chat_template_kwargs.enable_thinking: false` to compatible local models so the client receives final content without waiting for hidden reasoning
+
+### Requirement: Tool-calling passthrough
+The router SHALL forward OpenAI-compatible `tools`, `tool_choice`, and `parallel_tool_calls` request fields to the selected provider. It SHALL preserve assistant `tool_calls` and tool-result message metadata when forwarding subsequent requests, and return provider tool calls in both streaming and non-streaming OpenAI-compatible responses. The router SHALL NOT execute client-supplied tools itself.
+
+#### Scenario: Tool definitions reach the selected provider
+- **WHEN** a client posts a chat completion request containing a `tools` array and `tool_choice`
+- **THEN** the selected provider receives the same tool definitions and tool-choice instruction
+
+#### Scenario: Streaming tool calls reach the client
+- **WHEN** a provider emits a streaming delta containing `tool_calls`
+- **THEN** the router emits that delta to the client without replacing it with text content
+
+#### Scenario: Tool result is forwarded
+- **WHEN** a client sends a `tool` role message with its `tool_call_id`
+- **THEN** the selected provider receives the tool result and its matching call identifier
 
 ### Requirement: Request validation
 The router SHALL validate incoming chat requests and reject malformed ones with `400 Bad Request` and a message identifying the problem, without starting the local model or contacting any provider.
