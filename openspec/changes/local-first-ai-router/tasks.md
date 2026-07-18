@@ -98,7 +98,7 @@
 - [ ] 11.3 Write failing test then implement: a single transient probe failure does not recycle a working model
 - [ ] 11.4 Write failing test then implement: probe activity does not count as request activity for the idle guard, so probing cannot keep the model loaded forever
 - [ ] 11.5 Write failing test then implement: a probe failure while a request is still streaming successfully defers the kill until that request completes or fails
-- [ ] 11.6 Write failing test then implement startup adoption: a healthy server already on the configured host and port is adopted straight to `Ready` with no cold start and no second process
+- [x] 11.6 Write failing test then implement startup adoption: a healthy server already on the configured host and port is adopted straight to `Ready` with no cold start and no second process
 - [ ] 11.7 Write failing test then implement: an adopted server is idle-unloaded exactly as a spawned one
 - [ ] 11.8 Write failing test then implement: an occupied but unhealthy port is not raced — no competing spawn, `Faulted` with an explanatory reason
 - [ ] 11.9 Write failing test then implement: a free port starts normally with no adoption
